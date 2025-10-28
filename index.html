@@ -3,12 +3,12 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>19-Tage "Fitness"-Challenge</title>
+    <title>19-Tage "Fitness"-Challenge (Lokal)</title>
     <!-- Tailwind CSS laden -->
     <script src="https://cdn.tailwindcss.com"></script>
     <!-- Inter Font setzen -->
     <style>
-        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@100..900&display=swap');
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght=100..900&display=swap');
         body {
             font-family: 'Inter', sans-serif;
             background-color: #f7f9fc; /* Sehr hellblau/grau */
@@ -30,10 +30,9 @@
 
     <div id="app" class="w-full max-w-4xl bg-white p-6 md:p-10 rounded-3xl shadow-2xl border border-gray-100">
         <header class="text-center mb-8">
-            <!-- TITEL AKTUALISIERT -->
             <h1 class="text-4xl font-extrabold text-gray-900 mb-2">19-Tage "Fitness"-Challenge</h1>
-            <p class="text-gray-500 font-medium">Gemeinsamer Fortschritt in Echtzeit. Lass uns diesen Streak halten!</p>
-            <div id="user-info" class="mt-2 text-sm text-gray-400">Authentifiziere Nutzer...</div>
+            <!-- Hinweis: Nicht kollaborative Version -->
+            <p class="text-gray-500 font-medium">Dein lokaler Fortschritt (Wird nur in diesem Browser gespeichert!)</p>
         </header>
 
         <!-- Status-Anzeige (Emoji & Fortschritt) -->
@@ -57,9 +56,8 @@
         </div>
 
         <!-- Tage-Gitter -->
-        <!-- Gittergröße jetzt für 20 Elemente optimiert -->
         <div id="days-grid" class="grid grid-cols-4 sm:grid-cols-5 md:grid-cols-7 gap-4">
-            <!-- Tage werden hier von JavaScript gerendert (19 interaktiv + 1 Bonus-Karte) -->
+            <!-- Tage werden hier von JavaScript gerendert -->
         </div>
 
         <!-- Nachrichten-Bereich (für Fehler oder Status) -->
@@ -68,152 +66,52 @@
         </div>
     </div>
 
-    <!-- Firebase Skripte laden -->
+    <!-- Lokales Speicher-Skript -->
     <script type="module">
-        import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
-        import { getAuth, signInAnonymously, signInWithCustomToken, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
-        import { getFirestore, doc, onSnapshot, setDoc } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
-        import { setLogLevel } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+        // Schlüssel, unter dem der Fortschritt im Browser gespeichert wird
+        const STORAGE_KEY = 'fitnessTrackerProgress19Days';
+        const TOTAL_DAYS = 19; 
 
-        // Firestore Debug-Logging aktivieren
-        setLogLevel('debug');
-
-        // Globale Variablen aus dem Canvas-Environment
-        const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-fitness-tracker';
-        const firebaseConfig = typeof __firebase_config !== 'undefined' ? JSON.parse(__firebase_config) : {};
-        const initialAuthToken = typeof __initial_auth_token !== 'undefined' ? __initial_auth_token : null;
-
-        let db;
-        let auth;
-        let userId = null;
-        let trackerDocRef;
-
-        const TOTAL_DAYS = 19; // Die eigentliche Challenge bleibt 19 Tage
-        const TRACKER_COLLECTION = 'fitness_tracker_days';
-        const TRACKER_DOC_ID = 'main_tracker';
-
-        // Initialisiert Firebase und authentifiziert den Nutzer
-        async function initializeFirebase() {
-            try {
-                const app = initializeApp(firebaseConfig);
-                db = getFirestore(app);
-                auth = getAuth(app);
-
-                // Authentifizierung
-                if (initialAuthToken) {
-                    await signInWithCustomToken(auth, initialAuthToken);
-                } else {
-                    await signInAnonymously(auth);
-                }
-
-                // Warten auf den Authentifizierungsstatus
-                onAuthStateChanged(auth, (user) => {
-                    if (user) {
-                        userId = user.uid;
-                        document.getElementById('user-info').textContent = `Angemeldet als: ${userId.substring(0, 8)}... (ID: ${userId})`;
-                        setupRealtimeListener();
-                    } else {
-                        // Sollte wegen signInAnonymously() nicht passieren
-                        document.getElementById('user-info').textContent = "Authentifizierung fehlgeschlagen.";
-                    }
-                });
-            } catch (error) {
-                console.error("Fehler bei der Firebase-Initialisierung:", error);
-                showMessage(`Fehler bei der Initialisierung: ${error.message}`, 'error');
-            }
-        }
-
-        // Zeigt eine temporäre Nachricht an
-        function showMessage(text, type = 'info') {
-            const box = document.getElementById('message-box');
-            const content = document.getElementById('message-content');
-            box.classList.remove('hidden', 'bg-red-100', 'bg-green-100', 'text-red-700', 'text-green-700');
-
-            if (type === 'error') {
-                box.classList.add('bg-red-100', 'text-red-700');
-            } else if (type === 'success') {
-                box.classList.add('bg-green-100', 'text-green-700');
+        // Initialisiert den Tracker-Zustand aus dem lokalen Speicher
+        function loadTrackerState() {
+            const storedState = localStorage.getItem(STORAGE_KEY);
+            if (storedState) {
+                // Wenn Daten vorhanden sind, parse sie
+                return JSON.parse(storedState);
             }
             
-            content.textContent = text;
-            box.classList.remove('hidden');
-
-            setTimeout(() => {
-                box.classList.add('hidden');
-            }, 5000);
-        }
-
-        // Firestore Dokument-Referenz für geteilte Daten
-        function getTrackerDocRef() {
-             // Pfad: /artifacts/{appId}/public/data/fitness_tracker_days/main_tracker
-            return doc(db, 'artifacts', appId, 'public', 'data', TRACKER_COLLECTION, TRACKER_DOC_ID);
-        }
-
-        // Initialisiert den Realtime Listener
-        function setupRealtimeListener() {
-            trackerDocRef = getTrackerDocRef();
-            
-            onSnapshot(trackerDocRef, (docSnap) => {
-                if (docSnap.exists()) {
-                    const data = docSnap.data();
-                    renderApp(data.days || {});
-                } else {
-                    // Dokument existiert nicht, initialisiere es
-                    console.log("Tracker-Dokument existiert nicht. Initialisiere...");
-                    initializeTracker();
-                }
-            }, (error) => {
-                console.error("Fehler beim Firestore-Snapshot:", error);
-                showMessage(`Echtzeit-Fehler: ${error.message}`, 'error');
-            });
-        }
-
-        // Erstellt das initiale Tracker-Dokument
-        async function initializeTracker() {
+            // Wenn keine Daten vorhanden sind, initialisiere sie
             const initialDays = {};
             for (let i = 1; i <= TOTAL_DAYS; i++) {
                 initialDays[i.toString()] = false;
             }
-            const initialData = {
-                days: initialDays,
-                createdAt: new Date(),
-                lastUpdatedBy: userId,
-            };
+            // Speichere den initialen Zustand sofort ab
+            saveTrackerState(initialDays); 
+            return initialDays;
+        }
+
+        // Speichert den aktuellen Zustand im lokalen Speicher
+        function saveTrackerState(daysState) {
             try {
-                await setDoc(trackerDocRef, initialData);
-                console.log("Tracker initialisiert.");
+                localStorage.setItem(STORAGE_KEY, JSON.stringify(daysState));
             } catch (error) {
-                console.error("Fehler beim Initialisieren des Trackers:", error);
-                showMessage(`Initialisierungsfehler: ${error.message}`, 'error');
+                console.error("Fehler beim Speichern im LocalStorage:", error);
+                showMessage("Fehler beim Speichern des Fortschritts. Der Speicher ist möglicherweise voll.", 'error');
             }
         }
 
-        // Aktualisiert den Status eines Tages in Firestore
-        async function toggleDayStatus(dayNumber, currentDays) {
-            if (!userId) {
-                showMessage('Authentifizierung wird noch geladen. Bitte warten.', 'error');
-                return;
-            }
-            try {
-                const newStatus = !currentDays[dayNumber.toString()];
-                
-                // Erstelle das aktualisierte Days-Objekt
-                const updatedDays = {
-                    ...currentDays,
-                    [dayNumber.toString()]: newStatus
-                };
+        // Aktualisiert den Status eines Tages und rendert neu
+        function toggleDayStatus(dayNumber, currentDays) {
+            const dayKey = dayNumber.toString();
+            
+            // Erstelle eine Kopie des Zustands
+            const updatedDays = { ...currentDays };
+            // Status umschalten
+            updatedDays[dayKey] = !updatedDays[dayKey];
 
-                // Aktualisiere nur das 'days' Feld und Metadaten
-                await setDoc(trackerDocRef, {
-                    days: updatedDays,
-                    lastUpdated: new Date(),
-                    lastUpdatedBy: userId,
-                }, { merge: true }); // Nur die geänderten Felder zusammenführen
-
-            } catch (error) {
-                console.error("Fehler beim Umschalten des Tagesstatus:", error);
-                showMessage(`Fehler beim Speichern: ${error.message}`, 'error');
-            }
+            // Speichern und neu rendern
+            saveTrackerState(updatedDays);
+            renderApp(updatedDays);
         }
 
         // Definiert das Emoji basierend auf dem Fortschritt
@@ -228,7 +126,7 @@
             return '❓';
         }
 
-        // Rendert die gesamte Anwendung basierend auf den Firestore-Daten
+        // Rendert die gesamte Anwendung basierend auf den lokalen Daten
         function renderApp(days) {
             const daysGrid = document.getElementById('days-grid');
             daysGrid.innerHTML = '';
@@ -262,8 +160,12 @@
                         }
                     `;
 
+                    // Klick-Ereignis-Listener hinzufügen
                     dayCard.addEventListener('click', () => {
-                        toggleDayStatus(dayNumber, days);
+                        // Da wir den aktuellen Zustand aus dem Closure der Funktion renderApp benötigen
+                        // laden wir ihn hier zur Sicherheit neu.
+                        const currentDays = loadTrackerState();
+                        toggleDayStatus(dayNumber, currentDays);
                     });
 
                 } else { // Tag 20: "Teletech" Party-Karte (Statisch)
@@ -276,15 +178,39 @@
                         <div class="text-base font-medium mt-1">Teletech</div>
                         <div class="text-3xl mt-2">🎉</div>
                     `;
-                    // Diese Karte ist statisch, daher kein Event-Listener
                 }
 
                 daysGrid.appendChild(dayCard);
             }
         }
 
-        // Startpunkt
-        window.onload = initializeFirebase;
+        // Zeigt eine temporäre Nachricht an
+        function showMessage(text, type = 'info') {
+            const box = document.getElementById('message-box');
+            const content = document.getElementById('message-content');
+            box.classList.remove('hidden', 'bg-red-100', 'bg-green-100', 'text-red-700', 'text-green-700');
+
+            if (type === 'error') {
+                box.classList.add('bg-red-100', 'text-red-700');
+            } else if (type === 'success') {
+                box.classList.add('bg-green-100', 'text-green-700');
+            }
+            
+            content.textContent = text;
+            box.classList.remove('hidden');
+
+            setTimeout(() => {
+                box.classList.add('hidden');
+            }, 5000);
+        }
+        
+        // Startpunkt: Lade den Zustand und rendere die App
+        function initApp() {
+            const initialDays = loadTrackerState();
+            renderApp(initialDays);
+        }
+
+        window.onload = initApp;
     </script>
 </body>
 </html>
