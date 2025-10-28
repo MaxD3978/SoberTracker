@@ -1,0 +1,290 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>19-Tage "Fitness"-Challenge</title>
+    <!-- Tailwind CSS laden -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Inter Font setzen -->
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@100..900&display=swap');
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: #f7f9fc; /* Sehr hellblau/grau */
+        }
+        .day-card {
+            transition: all 0.3s ease;
+            cursor: pointer;
+            box-shadow: 0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1);
+        }
+        .day-card.checked {
+            background-color: #10b981; /* Emerald 500 */
+            color: white;
+            transform: scale(1.05);
+            box-shadow: 0 10px 15px -3px rgb(16 185 129 / 0.5), 0 4px 6px -4px rgb(16 185 129 / 0.5);
+        }
+    </style>
+</head>
+<body class="min-h-screen p-4 md:p-8 flex items-center justify-center">
+
+    <div id="app" class="w-full max-w-4xl bg-white p-6 md:p-10 rounded-3xl shadow-2xl border border-gray-100">
+        <header class="text-center mb-8">
+            <!-- TITEL AKTUALISIERT -->
+            <h1 class="text-4xl font-extrabold text-gray-900 mb-2">19-Tage "Fitness"-Challenge</h1>
+            <p class="text-gray-500 font-medium">Gemeinsamer Fortschritt in Echtzeit. Lass uns diesen Streak halten!</p>
+            <div id="user-info" class="mt-2 text-sm text-gray-400">Authentifiziere Nutzer...</div>
+        </header>
+
+        <!-- Status-Anzeige (Emoji & Fortschritt) -->
+        <div class="flex flex-col md:flex-row items-center justify-center space-y-6 md:space-y-0 md:space-x-8 mb-10 p-6 bg-gray-50 rounded-2xl border-2 border-dashed border-gray-200">
+            
+            <!-- Dynamisches Emoji -->
+            <div id="status-emoji" class="text-6xl md:text-8xl transition-transform duration-500 hover:scale-110">
+                😩
+            </div>
+
+            <!-- Fortschrittsbalken -->
+            <div class="w-full md:w-3/5">
+                <div class="flex justify-between items-center mb-2">
+                    <span class="text-xl font-bold text-gray-700">Dein Fortschritt</span>
+                    <span id="progress-text" class="text-lg font-semibold text-emerald-600">0/19 Tage (0%)</span>
+                </div>
+                <div class="w-full bg-gray-200 rounded-full h-4">
+                    <div id="progress-bar" class="bg-emerald-500 h-4 rounded-full transition-all duration-700 ease-out" style="width: 0%"></div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Tage-Gitter -->
+        <!-- Gittergröße jetzt für 20 Elemente optimiert -->
+        <div id="days-grid" class="grid grid-cols-4 sm:grid-cols-5 md:grid-cols-7 gap-4">
+            <!-- Tage werden hier von JavaScript gerendert (19 interaktiv + 1 Bonus-Karte) -->
+        </div>
+
+        <!-- Nachrichten-Bereich (für Fehler oder Status) -->
+        <div id="message-box" class="mt-8 text-center hidden">
+            <p id="message-content" class="text-sm p-3 rounded-xl bg-red-100 text-red-700"></p>
+        </div>
+    </div>
+
+    <!-- Firebase Skripte laden -->
+    <script type="module">
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
+        import { getAuth, signInAnonymously, signInWithCustomToken, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
+        import { getFirestore, doc, onSnapshot, setDoc } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+        import { setLogLevel } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+
+        // Firestore Debug-Logging aktivieren
+        setLogLevel('debug');
+
+        // Globale Variablen aus dem Canvas-Environment
+        const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-fitness-tracker';
+        const firebaseConfig = typeof __firebase_config !== 'undefined' ? JSON.parse(__firebase_config) : {};
+        const initialAuthToken = typeof __initial_auth_token !== 'undefined' ? __initial_auth_token : null;
+
+        let db;
+        let auth;
+        let userId = null;
+        let trackerDocRef;
+
+        const TOTAL_DAYS = 19; // Die eigentliche Challenge bleibt 19 Tage
+        const TRACKER_COLLECTION = 'fitness_tracker_days';
+        const TRACKER_DOC_ID = 'main_tracker';
+
+        // Initialisiert Firebase und authentifiziert den Nutzer
+        async function initializeFirebase() {
+            try {
+                const app = initializeApp(firebaseConfig);
+                db = getFirestore(app);
+                auth = getAuth(app);
+
+                // Authentifizierung
+                if (initialAuthToken) {
+                    await signInWithCustomToken(auth, initialAuthToken);
+                } else {
+                    await signInAnonymously(auth);
+                }
+
+                // Warten auf den Authentifizierungsstatus
+                onAuthStateChanged(auth, (user) => {
+                    if (user) {
+                        userId = user.uid;
+                        document.getElementById('user-info').textContent = `Angemeldet als: ${userId.substring(0, 8)}... (ID: ${userId})`;
+                        setupRealtimeListener();
+                    } else {
+                        // Sollte wegen signInAnonymously() nicht passieren
+                        document.getElementById('user-info').textContent = "Authentifizierung fehlgeschlagen.";
+                    }
+                });
+            } catch (error) {
+                console.error("Fehler bei der Firebase-Initialisierung:", error);
+                showMessage(`Fehler bei der Initialisierung: ${error.message}`, 'error');
+            }
+        }
+
+        // Zeigt eine temporäre Nachricht an
+        function showMessage(text, type = 'info') {
+            const box = document.getElementById('message-box');
+            const content = document.getElementById('message-content');
+            box.classList.remove('hidden', 'bg-red-100', 'bg-green-100', 'text-red-700', 'text-green-700');
+
+            if (type === 'error') {
+                box.classList.add('bg-red-100', 'text-red-700');
+            } else if (type === 'success') {
+                box.classList.add('bg-green-100', 'text-green-700');
+            }
+            
+            content.textContent = text;
+            box.classList.remove('hidden');
+
+            setTimeout(() => {
+                box.classList.add('hidden');
+            }, 5000);
+        }
+
+        // Firestore Dokument-Referenz für geteilte Daten
+        function getTrackerDocRef() {
+             // Pfad: /artifacts/{appId}/public/data/fitness_tracker_days/main_tracker
+            return doc(db, 'artifacts', appId, 'public', 'data', TRACKER_COLLECTION, TRACKER_DOC_ID);
+        }
+
+        // Initialisiert den Realtime Listener
+        function setupRealtimeListener() {
+            trackerDocRef = getTrackerDocRef();
+            
+            onSnapshot(trackerDocRef, (docSnap) => {
+                if (docSnap.exists()) {
+                    const data = docSnap.data();
+                    renderApp(data.days || {});
+                } else {
+                    // Dokument existiert nicht, initialisiere es
+                    console.log("Tracker-Dokument existiert nicht. Initialisiere...");
+                    initializeTracker();
+                }
+            }, (error) => {
+                console.error("Fehler beim Firestore-Snapshot:", error);
+                showMessage(`Echtzeit-Fehler: ${error.message}`, 'error');
+            });
+        }
+
+        // Erstellt das initiale Tracker-Dokument
+        async function initializeTracker() {
+            const initialDays = {};
+            for (let i = 1; i <= TOTAL_DAYS; i++) {
+                initialDays[i.toString()] = false;
+            }
+            const initialData = {
+                days: initialDays,
+                createdAt: new Date(),
+                lastUpdatedBy: userId,
+            };
+            try {
+                await setDoc(trackerDocRef, initialData);
+                console.log("Tracker initialisiert.");
+            } catch (error) {
+                console.error("Fehler beim Initialisieren des Trackers:", error);
+                showMessage(`Initialisierungsfehler: ${error.message}`, 'error');
+            }
+        }
+
+        // Aktualisiert den Status eines Tages in Firestore
+        async function toggleDayStatus(dayNumber, currentDays) {
+            if (!userId) {
+                showMessage('Authentifizierung wird noch geladen. Bitte warten.', 'error');
+                return;
+            }
+            try {
+                const newStatus = !currentDays[dayNumber.toString()];
+                
+                // Erstelle das aktualisierte Days-Objekt
+                const updatedDays = {
+                    ...currentDays,
+                    [dayNumber.toString()]: newStatus
+                };
+
+                // Aktualisiere nur das 'days' Feld und Metadaten
+                await setDoc(trackerDocRef, {
+                    days: updatedDays,
+                    lastUpdated: new Date(),
+                    lastUpdatedBy: userId,
+                }, { merge: true }); // Nur die geänderten Felder zusammenführen
+
+            } catch (error) {
+                console.error("Fehler beim Umschalten des Tagesstatus:", error);
+                showMessage(`Fehler beim Speichern: ${error.message}`, 'error');
+            }
+        }
+
+        // Definiert das Emoji basierend auf dem Fortschritt
+        function getProgressEmoji(completedCount) {
+            if (completedCount === 0) return '😩'; // Traurig
+            if (completedCount <= 3) return '🙁'; // Enttäuscht
+            if (completedCount <= 7) return '😐'; // Neutral
+            if (completedCount <= 11) return '🙂'; // Lächelnd
+            if (completedCount <= 15) return '😁'; // Breit grinsend
+            if (completedCount <= 18) return '🤩'; // Sternchen-Augen
+            if (completedCount === 19) return '🥳'; // Party (Ziel erreicht!)
+            return '❓';
+        }
+
+        // Rendert die gesamte Anwendung basierend auf den Firestore-Daten
+        function renderApp(days) {
+            const daysGrid = document.getElementById('days-grid');
+            daysGrid.innerHTML = '';
+            
+            const completedDays = Object.values(days).filter(status => status).length;
+            const progressPercentage = Math.round((completedDays / TOTAL_DAYS) * 100);
+
+            // 1. Emoji und Fortschritt aktualisieren
+            document.getElementById('status-emoji').textContent = getProgressEmoji(completedDays);
+            document.getElementById('progress-bar').style.width = `${progressPercentage}%`;
+            document.getElementById('progress-text').textContent = `${completedDays}/${TOTAL_DAYS} Tage (${progressPercentage}%)`;
+
+            // 2. Tage rendern (1 bis 20)
+            const totalCards = TOTAL_DAYS + 1; // 20 Karten
+            for (let i = 1; i <= totalCards; i++) {
+                const dayCard = document.createElement('div');
+                const dayNumber = i.toString();
+
+                if (i <= TOTAL_DAYS) { // Tag 1 bis 19: Interaktiver Tracker
+                    const isChecked = days[dayNumber] || false;
+
+                    dayCard.className = `day-card relative p-4 rounded-xl text-center font-bold text-xl transition-all duration-300 transform ${isChecked ? 'checked' : 'bg-white text-gray-800 hover:bg-emerald-50 active:bg-emerald-100'}`;
+                    dayCard.dataset.day = dayNumber;
+                    
+                    dayCard.innerHTML = `
+                        <span class="text-xs font-semibold ${isChecked ? 'text-white/80' : 'text-gray-400'}">TAG</span>
+                        <div class="text-3xl mt-1">${dayNumber}</div>
+                        ${isChecked 
+                            ? '<svg class="w-6 h-6 absolute top-2 right-2 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path></svg>'
+                            : '<div class="w-6 h-6 absolute top-2 right-2 text-gray-300 border-2 border-gray-300 rounded-full"></div>'
+                        }
+                    `;
+
+                    dayCard.addEventListener('click', () => {
+                        toggleDayStatus(dayNumber, days);
+                    });
+
+                } else { // Tag 20: "Teletech" Party-Karte (Statisch)
+                    dayCard.className = `relative p-4 rounded-xl text-center font-bold text-xl bg-purple-600 text-white shadow-lg border-4 border-purple-400 transform hover:scale-105 transition-transform duration-300`;
+                    dayCard.dataset.day = dayNumber;
+                    
+                    dayCard.innerHTML = `
+                        <span class="text-xs font-semibold text-white/80">ZIEL</span>
+                        <div class="text-3xl mt-1">20</div>
+                        <div class="text-base font-medium mt-1">Teletech</div>
+                        <div class="text-3xl mt-2">🎉</div>
+                    `;
+                    // Diese Karte ist statisch, daher kein Event-Listener
+                }
+
+                daysGrid.appendChild(dayCard);
+            }
+        }
+
+        // Startpunkt
+        window.onload = initializeFirebase;
+    </script>
+</body>
+</html>
