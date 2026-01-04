@@ -12,56 +12,6 @@ const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
    ========================= */
 const A2HS_KEY = "sober_a2hs_dismissed_v1";
 
-function isStandalone() {
-  return window.navigator.standalone === true ||
-    window.matchMedia("(display-mode: standalone)").matches;
-}
-function isIphoneSafari() {
-  const ua = navigator.userAgent || "";
-  const isIOS = /iPhone|iPad|iPod/i.test(ua);
-  const isSafari = /Safari/i.test(ua) && !/CriOS|FxiOS|EdgiOS/i.test(ua);
-  return isIOS && isSafari;
-}
-function showA2HS() {
-  const el = document.getElementById("a2hs");
-  if (!el) return;
-
-  el.classList.remove("hidden");
-  el.classList.remove("pointer-events-none");
-
-  // wichtig: als flex anzeigen
-  el.classList.add("flex");
-
-  // und aktiv klickbar machen
-  el.style.pointerEvents = "auto";
-}
-function hideA2HS(remember = true) {
-  const el = document.getElementById("a2hs");
-  if (!el) return;
-
-  el.classList.add("hidden");
-  el.classList.remove("flex");
-
-  // wieder “durchlässig” machen, falls irgendwas hängen bleibt
-  el.classList.add("pointer-events-none");
-  el.style.pointerEvents = "none";
-
-  if (remember) localStorage.setItem(A2HS_KEY, "1");
-}
-function maybeShowA2HS() {
-  const dismissed = localStorage.getItem(A2HS_KEY) === "1";
-  if (dismissed) return;
-  if (isStandalone()) return;
-  if (!isIphoneSafari()) return;
-  setTimeout(showA2HS, 900);
-}
-function wireA2HSButtons() {
-  const closeBtn = document.getElementById("a2hs-close");
-  const laterBtn = document.getElementById("a2hs-later");
-  if (closeBtn) closeBtn.addEventListener("click", () => hideA2HS(true));
-  if (laterBtn) laterBtn.addEventListener("click", () => hideA2HS(false));
-}
-
 /* =========================
    2) HELPERS / STATE
    ========================= */
@@ -591,8 +541,6 @@ function renderDashboard() {
    6) BOOT
    ========================= */
 window.addEventListener("load", async () => {
-  wireA2HSButtons();
-  maybeShowA2HS();
 
   const savedCode = normalizeRoomCode(localStorage.getItem(LS.roomCode) ?? "");
   const savedNick = (localStorage.getItem(LS.nickname) ?? "").trim();
