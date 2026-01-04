@@ -28,7 +28,7 @@
   <!-- App Shell -->
   <div class="min-h-screen p-4 md:p-8 flex items-center justify-center">
     <div class="w-full max-w-4xl bg-white/90 dark:bg-slate-900/80 backdrop-blur rounded-3xl shadow-2xl border border-slate-200/60 dark:border-slate-800 p-6 md:p-10">
-      
+
       <!-- Header -->
       <header class="text-center mb-8">
         <h1 class="text-3xl md:text-4xl font-extrabold tracking-tight">
@@ -50,10 +50,56 @@
         </div>
       </main>
 
+      <!-- A2HS Overlay (iOS) -->
+      <div id="a2hs" class="fixed inset-0 z-50 hidden items-end md:items-center justify-center p-4">
+        <div class="w-full max-w-xl rounded-3xl border border-slate-200 dark:border-slate-800 bg-white/95 dark:bg-slate-900/95 backdrop-blur shadow-2xl p-5 md:p-6">
+          <div class="flex items-start gap-3">
+            <div class="text-3xl">📲</div>
+            <div class="flex-1">
+              <p class="text-lg font-extrabold">Als App installieren</p>
+              <p class="mt-1 text-sm text-slate-600 dark:text-slate-300">
+                Damit es sich wie eine echte App anfühlt (Fullscreen + schneller Zugriff):
+              </p>
+
+              <ol class="mt-3 space-y-2 text-sm text-slate-700 dark:text-slate-200">
+                <li class="flex gap-2">
+                  <span class="font-bold">1.</span>
+                  <span>Tippe unten auf <span class="font-semibold">Teilen</span> (<span class="inline-block">⤴️</span>).</span>
+                </li>
+                <li class="flex gap-2">
+                  <span class="font-bold">2.</span>
+                  <span>Wähle <span class="font-semibold">„Zum Home-Bildschirm“</span>.</span>
+                </li>
+                <li class="flex gap-2">
+                  <span class="font-bold">3.</span>
+                  <span>Öffne danach die App vom Homescreen.</span>
+                </li>
+              </ol>
+
+              <div class="mt-4 flex gap-2">
+                <button id="a2hs-close"
+                  class="flex-1 rounded-2xl px-4 py-3 font-bold bg-slate-900 text-white hover:opacity-90">
+                  Okay
+                </button>
+                <button id="a2hs-later"
+                  class="rounded-2xl px-4 py-3 font-semibold border border-slate-200 dark:border-slate-800 hover:bg-slate-50 dark:hover:bg-slate-800">
+                  Später
+                </button>
+              </div>
+
+              <p class="mt-3 text-xs text-slate-400">
+                Hinweis: iPhone zeigt kein automatisches Install-Popup – das geht nur über „Teilen“.
+              </p>
+            </div>
+          </div>
+        </div>
+      </div>
+
       <!-- Footer Mini -->
       <footer class="mt-8 text-center text-xs text-slate-400">
         Tipp: Auf iPhone in Safari → Teilen → „Zum Home-Bildschirm“.
       </footer>
+
     </div>
   </div>
 
