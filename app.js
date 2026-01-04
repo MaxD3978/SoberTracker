@@ -421,9 +421,11 @@ function renderDashboard() {
   const otherWeek = other ? computeWeekCount(other.id) : 0;
 
   const leader =
-    other
-      ? (meWeek === otherWeek ? "Gleichstand 🤝" : (meWeek > otherWeek ? `${meRow.nickname} führt 🏁` : `${other.nickname} führt 🏁`))
-      : "Warte auf Mitspieler…";
+  other
+    ? (meDone === otherDone
+        ? "Gleichstand 🤝"
+        : (meDone > otherDone ? `${meRow.nickname} führt 🏁` : `${other.nickname} führt 🏁`))
+    : "Warte auf Mitspieler…";
 
   const dayCards = daysArr.map(d => {
     const dayKey = formatDateLocal(d);
