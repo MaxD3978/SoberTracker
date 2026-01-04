@@ -25,18 +25,27 @@ function isIphoneSafari() {
 function showA2HS() {
   const el = document.getElementById("a2hs");
   if (!el) return;
+
   el.classList.remove("hidden");
   el.classList.remove("pointer-events-none");
+
+  // wichtig: als flex anzeigen
   el.classList.add("flex");
-  el.classList.add("pointer-events-auto");
+
+  // und aktiv klickbar machen
+  el.style.pointerEvents = "auto";
 }
 function hideA2HS(remember = true) {
   const el = document.getElementById("a2hs");
   if (!el) return;
+
   el.classList.add("hidden");
   el.classList.remove("flex");
-  el.classList.remove("pointer-events-auto");
+
+  // wieder “durchlässig” machen, falls irgendwas hängen bleibt
   el.classList.add("pointer-events-none");
+  el.style.pointerEvents = "none";
+
   if (remember) localStorage.setItem(A2HS_KEY, "1");
 }
 function maybeShowA2HS() {
