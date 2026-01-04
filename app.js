@@ -502,7 +502,7 @@ function renderDashboard() {
         </div>
       </div>
 
-      <div class="grid grid-cols-3 sm:grid-cols-5 md:grid-cols-7 gap-3">
+      <div id="daysGrid" class="grid grid-cols-3 sm:grid-cols-5 md:grid-cols-7 gap-3">
         ${dayCards}
       </div>
 
@@ -534,9 +534,25 @@ function renderDashboard() {
     renderJoin();
   });
 
-  document.querySelectorAll("[data-day]").forEach((btn) => {
+  // iOS Tap-Fix: Event Delegation + Touchstart
+(function wireDayGrid() {
+  const grid = document.getElementById("daysGrid");
+  if (!grid) return;
+
+  let lastTouchTs = 0;
+
   const handler = async (ev) => {
-    ev.preventDefault(); // wichtig für iOS
+    const btn = ev.target.closest("[data-day]");
+    if (!btn) return;
+
+    // iOS: touchstart löst oft zusätzlich click aus → doppelt verhindern
+    if (ev.type === "touchstart") {
+      lastTouchTs = Date.now();
+      ev.preventDefault();
+    } else if (ev.type === "click" && Date.now() - lastTouchTs < 600) {
+      return; // click ignorieren, wenn gerade touchstart kam
+    }
+
     const dayStr = btn.getAttribute("data-day");
     if (!dayStr) return;
 
@@ -553,9 +569,9 @@ function renderDashboard() {
     }
   };
 
-  btn.addEventListener("click", handler);
-  btn.addEventListener("touchend", handler, { passive: false });
-});
+  grid.addEventListener("touchstart", handler, { passive: false });
+  grid.addEventListener("click", handler);
+})();
 }
 
 /* =========================
