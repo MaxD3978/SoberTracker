@@ -439,7 +439,7 @@ function renderDashboard() {
 
     return `
       <button data-day="${dayKey}"
-        class="day-card group relative p-3 rounded-2xl border text-left
+        class="day-card group relative p-3 rounded-2xl border text-left touch-manipulation
           ${meOn ? "bg-emerald-500 text-white border-emerald-400" : "bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-800 hover:bg-slate-50 dark:hover:bg-slate-800"}
         ">
         <div class="text-xs font-semibold ${meOn ? "text-white/80" : "text-slate-400"}">TAG</div>
@@ -534,21 +534,28 @@ function renderDashboard() {
     renderJoin();
   });
 
-  document.querySelectorAll("[data-day]")?.forEach(btn => {
-    btn.addEventListener("click", async () => {
-      const dayStr = btn.getAttribute("data-day");
-      if (!dayStr) return;
-      try {
-        await toggleMyDay(dayStr);
-        const k = `${STATE.me.id}:${dayStr}`;
-        STATE.checkins.set(k, !(STATE.checkins.get(k) === true));
-        renderDashboard();
-      } catch (e) {
-        console.error(e);
-        toast("Speichern fehlgeschlagen.");
-      }
-    });
-  });
+  document.querySelectorAll("[data-day]").forEach((btn) => {
+  const handler = async (ev) => {
+    ev.preventDefault(); // wichtig für iOS
+    const dayStr = btn.getAttribute("data-day");
+    if (!dayStr) return;
+
+    try {
+      await toggleMyDay(dayStr);
+
+      // Optimistic UI
+      const k = `${STATE.me.id}:${dayStr}`;
+      STATE.checkins.set(k, !(STATE.checkins.get(k) === true));
+      renderDashboard();
+    } catch (e) {
+      console.error(e);
+      toast("Speichern fehlgeschlagen.");
+    }
+  };
+
+  btn.addEventListener("click", handler);
+  btn.addEventListener("touchend", handler, { passive: false });
+});
 }
 
 /* =========================
