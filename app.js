@@ -5,55 +5,67 @@ const SUPABASE_ANON_KEY = "sb_publishable_EVhNmgA6RjiNSZFAVvpzMQ_P-OC4WAd";
 
 const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
-// ---------- A2HS (iOS) ----------
-const A2HS_KEY = "sober_a2hs_dismissed_v1";
-
-function isStandalone() {
-  // iOS (navigator.standalone) + allgemeiner Standard
-  return window.navigator.standalone === true ||
-         window.matchMedia("(display-mode: standalone)").matches;
+function setApp(html) {
+  const root = document.getElementById("app");
+  if (root) root.innerHTML = html;
 }
 
-function isIphoneSafari() {
-  const ua = navigator.userAgent || "";
-  const isIOS = /iPhone|iPad|iPod/i.test(ua);
-  const isSafari = /Safari/i.test(ua) && !/CriOS|FxiOS|EdgiOS/i.test(ua);
-  return isIOS && isSafari;
+function randomRoomCode(len = 6) {
+  const chars = "ABCDEFGHJKMNPQRSTUVWXYZ23456789"; // ohne I,O,1,0
+  let out = "";
+  for (let i = 0; i < len; i++) out += chars[Math.floor(Math.random() * chars.length)];
+  return out;
 }
 
-function showA2HS() {
-  const el = document.getElementById("a2hs");
-  if (!el) return;
-  el.classList.remove("hidden");
-  el.classList.add("flex");
-}
+window.addEventListener("load", async () => {
+  setApp(`
+    <div class="p-4 rounded-2xl border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-950">
+      <p class="font-extrabold text-lg">Supabase Verbindungstest</p>
+      <p class="text-sm text-slate-600 dark:text-slate-300 mt-1">
+        Wenn das klappt, wird ein Room in die Tabelle <code>rooms</code> geschrieben.
+      </p>
 
-function hideA2HS(remember = true) {
-  const el = document.getElementById("a2hs");
-  if (!el) return;
-  el.classList.add("hidden");
-  el.classList.remove("flex");
-  if (remember) localStorage.setItem(A2HS_KEY, "1");
-}
+      <button id="btn"
+        class="mt-4 w-full rounded-2xl px-4 py-3 font-bold bg-slate-900 text-white hover:opacity-90">
+        Test: Room anlegen
+      </button>
 
-function maybeShowA2HS() {
-  const dismissed = localStorage.getItem(A2HS_KEY) === "1";
-  if (dismissed) return;
-  if (isStandalone()) return;          // schon installiert
-  if (!isIphoneSafari()) return;       // nur iPhone Safari
-  // Zeig nach kurzem Delay, damit es nicht "in your face" ist
-  setTimeout(showA2HS, 900);
-}
+      <div id="out" class="mt-4 text-sm text-slate-700 dark:text-slate-200"></div>
+    </div>
+  `);
 
-function wireA2HSButtons() {
-  const closeBtn = document.getElementById("a2hs-close");
-  const laterBtn = document.getElementById("a2hs-later");
-  if (closeBtn) closeBtn.addEventListener("click", () => hideA2HS(true));
-  if (laterBtn) laterBtn.addEventListener("click", () => hideA2HS(false)); // nicht merken
-}
+  const out = document.getElementById("out");
+  const btn = document.getElementById("btn");
 
-// Beim Laden einmal ausführen
-window.addEventListener("load", () => {
-  wireA2HSButtons();
-  maybeShowA2HS();
+  btn.addEventListener("click", async () => {
+    try {
+      btn.disabled = true;
+      btn.textContent = "Teste…";
+
+      const code = randomRoomCode(6);
+
+      const { data, error } = await supabase
+        .from("rooms")
+        .insert({ code })
+        .select("*")
+        .single();
+
+      if (error) throw error;
+
+      out.innerHTML = `
+        ✅ Erfolg! Room erstellt:<br>
+        <code>${JSON.stringify(data, null, 2)}</code>
+      `;
+      btn.textContent = "Nochmal testen";
+      btn.disabled = false;
+    } catch (e) {
+      console.error(e);
+      out.innerHTML = `
+        ❌ Fehler:<br>
+        <code>${(e?.message ?? String(e))}</code>
+      `;
+      btn.textContent = "Erneut versuchen";
+      btn.disabled = false;
+    }
+  });
 });
