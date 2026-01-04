@@ -26,13 +26,17 @@ function showA2HS() {
   const el = document.getElementById("a2hs");
   if (!el) return;
   el.classList.remove("hidden");
+  el.classList.remove("pointer-events-none");
   el.classList.add("flex");
+  el.classList.add("pointer-events-auto");
 }
 function hideA2HS(remember = true) {
   const el = document.getElementById("a2hs");
   if (!el) return;
   el.classList.add("hidden");
   el.classList.remove("flex");
+  el.classList.remove("pointer-events-auto");
+  el.classList.add("pointer-events-none");
   if (remember) localStorage.setItem(A2HS_KEY, "1");
 }
 function maybeShowA2HS() {
