@@ -1,3 +1,10 @@
+import { createClient } from "https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/+esm";
+
+const SUPABASE_URL = "https://iuyunzybggaofiryncak.supabase.co";
+const SUPABASE_ANON_KEY = "sb_publishable_EVhNmgA6RjiNSZFAVvpzMQ_P-OC4WAd";
+
+const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+
 // ---------- A2HS (iOS) ----------
 const A2HS_KEY = "sober_a2hs_dismissed_v1";
 
