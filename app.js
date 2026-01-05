@@ -243,15 +243,28 @@ function toast(text) {
   alert(text);
 }
 
+function ensureConfettiRoot() {
+  let root = document.getElementById("confetti");
+  if (!root) {
+    root = document.createElement("div");
+    root.id = "confetti";
+    root.style.position = "fixed";
+    root.style.inset = "0";
+    root.style.zIndex = "9999";
+    root.style.pointerEvents = "none";
+    root.style.overflow = "hidden";
+    root.style.display = "none";
+    document.body.appendChild(root);
+  }
+  return root;
+}
+
 function burstConfetti() {
-  const root = document.getElementById("confetti");
-  if (!root) return;
-
-  // Reset
+  const root = ensureConfettiRoot();
   root.innerHTML = "";
-  root.classList.remove("hidden");
+  root.style.display = "block";
 
-  const pieces = 70; // nicht zu hoch fürs iPhone
+  const pieces = 70;
   const duration = 1200;
 
   for (let i = 0; i < pieces; i++) {
@@ -263,13 +276,10 @@ function burstConfetti() {
     p.style.height = `${8 + Math.random() * 10}px`;
     p.style.borderRadius = "2px";
     p.style.opacity = "0.95";
-
-    // zufällige Farbe (kein Tailwind, direkt inline)
     p.style.background = `hsl(${Math.floor(Math.random() * 360)}, 90%, 60%)`;
 
-    // Animation: fallen + drehen
-    const fall = 70 + Math.random() * 45;     // vh
-    const drift = -20 + Math.random() * 40;   // vw
+    const fall = 70 + Math.random() * 45;
+    const drift = -20 + Math.random() * 40;
     const rot = -360 + Math.random() * 720;
 
     p.animate(
@@ -287,7 +297,7 @@ function burstConfetti() {
   }
 
   setTimeout(() => {
-    root.classList.add("hidden");
+    root.style.display = "none";
     root.innerHTML = "";
   }, duration + 500);
 }
@@ -747,6 +757,9 @@ async function handleActionFromEvent(ev) {
       const daysArr = monthDays(TRACK_YEAR, TRACK_MONTH_INDEX);
       const beforeDone = computeProgress(STATE.me.id, daysArr);
 
+      const daysArr = monthDays(TRACK_YEAR, TRACK_MONTH_INDEX);
+      const beforeDone = computeProgress(STATE.me.id, daysArr);
+
       await toggleMyDay(dayStr);
 
       const k = `${STATE.me.id}:${dayStr}`;
@@ -755,7 +768,8 @@ async function handleActionFromEvent(ev) {
       const afterDone = computeProgress(STATE.me.id, daysArr);
 
       if (afterDone > beforeDone && afterDone % 7 === 0) {
-         burstConfetti();
+      burstConfetti();
+      }
 
       renderDashboard();
     } catch (e) {
