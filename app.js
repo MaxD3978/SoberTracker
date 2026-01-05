@@ -46,7 +46,8 @@ function normalizeRoomCode(code) {
 function randomRoomCode(len = 6) {
   const chars = "ABCDEFGHJKMNPQRSTUVWXYZ23456789";
   let out = "";
-  for (let i = 0; i < len; i++) out += chars[Math.floor(Math.random() * chars.length)];
+  for (let i = 0; i < len; i++)
+    out += chars[Math.floor(Math.random() * chars.length)];
   return out;
 }
 
@@ -147,7 +148,10 @@ async function loadPlayers(roomId) {
 }
 
 async function loadCheckins(roomId) {
-  const start = `${TRACK_YEAR}-${String(TRACK_MONTH_INDEX + 1).padStart(2, "0")}-01`;
+  const start = `${TRACK_YEAR}-${String(TRACK_MONTH_INDEX + 1).padStart(
+    2,
+    "0"
+  )}-01`;
   const endDate = new Date(TRACK_YEAR, TRACK_MONTH_INDEX + 1, 1);
   const end = formatDateLocal(endDate);
 
@@ -161,7 +165,7 @@ async function loadCheckins(roomId) {
   if (error) throw error;
 
   const map = new Map();
-  for (const row of (data ?? [])) {
+  for (const row of data ?? []) {
     map.set(`${row.player_id}:${row.day}`, !!row.done);
   }
   return map;
@@ -176,18 +180,16 @@ async function toggleMyDay(dayStr) {
   const current = STATE.checkins.get(key) === true;
   const next = !current;
 
-  const { error } = await supabase
-    .from("checkins")
-    .upsert(
-      {
-        room_id: room.id,
-        player_id: me.id,
-        day: dayStr,
-        done: next,
-        updated_at: new Date().toISOString(),
-      },
-      { onConflict: "room_id,player_id,day" }
-    );
+  const { error } = await supabase.from("checkins").upsert(
+    {
+      room_id: room.id,
+      player_id: me.id,
+      day: dayStr,
+      done: next,
+      updated_at: new Date().toISOString(),
+    },
+    { onConflict: "room_id,player_id,day" }
+  );
 
   if (error) throw error;
 }
@@ -195,7 +197,11 @@ async function toggleMyDay(dayStr) {
 async function setMyToken(tokenId) {
   if (!STATE.room || !STATE.me) return;
   const nextAvatar = { ...(STATE.me.avatar || {}), token: tokenId };
-  const updated = await upsertPlayer(STATE.room.id, STATE.me.nickname, nextAvatar);
+  const updated = await upsertPlayer(
+    STATE.room.id,
+    STATE.me.nickname,
+    nextAvatar
+  );
   STATE.me = updated;
   STATE.players = await loadPlayers(STATE.room.id);
 }
@@ -213,7 +219,12 @@ function subscribeRoom(roomId) {
     .channel(`room:${roomId}`)
     .on(
       "postgres_changes",
-      { event: "*", schema: "public", table: "checkins", filter: `room_id=eq.${roomId}` },
+      {
+        event: "*",
+        schema: "public",
+        table: "checkins",
+        filter: `room_id=eq.${roomId}`,
+      },
       async () => {
         STATE.checkins = await loadCheckins(roomId);
         STATE.players = await loadPlayers(roomId);
@@ -222,7 +233,12 @@ function subscribeRoom(roomId) {
     )
     .on(
       "postgres_changes",
-      { event: "*", schema: "public", table: "players", filter: `room_id=eq.${roomId}` },
+      {
+        event: "*",
+        schema: "public",
+        table: "players",
+        filter: `room_id=eq.${roomId}`,
+      },
       async () => {
         STATE.players = await loadPlayers(roomId);
         renderDashboard();
@@ -243,6 +259,7 @@ function toast(text) {
   alert(text);
 }
 
+/* ===== Confetti (Milestone: every 7th done day) ===== */
 function ensureConfettiRoot() {
   let root = document.getElementById("confetti");
   if (!root) {
@@ -417,7 +434,8 @@ async function createRoomFlow() {
     const code = desired || randomRoomCode(6);
 
     const exists = await getRoomByCode(code);
-    if (exists) return toast("Code schon vergeben. Bitte anderen Code oder leer lassen.");
+    if (exists)
+      return toast("Code schon vergeben. Bitte anderen Code oder leer lassen.");
 
     const room = await createRoom(code);
     await enterRoom(room, nickname);
@@ -452,125 +470,119 @@ function renderDashboard() {
   const me = STATE.me;
   if (!room || !me) return renderJoin();
 
-  const daysArr = monthDays(TRACK_YEAR, TRACK_MONTH_INDEX);
-  const totalDays = daysArr.length;
+  const monthArr = monthDays(TRACK_YEAR, TRACK_MONTH_INDEX);
+  const totalDays = monthArr.length;
 
   const players = STATE.players.slice(0, 2);
   const meRow = players.find((p) => p.id === me.id) ?? me;
   const other = players.find((p) => p.id !== me.id) ?? null;
 
-  const meDone = computeProgress(meRow.id, daysArr);
-  const otherDone = other ? computeProgress(other.id, daysArr) : 0;
+  const meDone = computeProgress(meRow.id, monthArr);
+  const otherDone = other ? computeProgress(other.id, monthArr) : 0;
 
-  const meStreak = computeStreak(meRow.id, daysArr);
-  const otherStreak = other ? computeStreak(other.id, daysArr) : 0;
+  const meStreak = computeStreak(meRow.id, monthArr);
+  const otherStreak = other ? computeStreak(other.id, monthArr) : 0;
 
   const meWeek = computeWeekCount(meRow.id);
   const otherWeek = other ? computeWeekCount(other.id) : 0;
 
-  // Mini-Ranking = Monat
   const leader =
     other
       ? (meDone === otherDone
           ? "Gleichstand 🤝"
-          : (meDone > otherDone ? `${meRow.nickname} führt 🏁` : `${other.nickname} führt 🏁`))
+          : (meDone > otherDone
+              ? `${meRow.nickname} führt 🏁`
+              : `${other.nickname} führt 🏁`))
       : "Warte auf Mitspieler…";
 
-  // Board tiles: START + Tage + FINISH
-  const tiles = [{ type: "start" }, ...daysArr.map((d) => ({ type: "day", d })), { type: "finish" }];
+  const tiles = [{ type: "start" }, ...monthArr.map((d) => ({ type: "day", d })), { type: "finish" }];
   const totalTiles = tiles.length;
 
-  // Position: 0 = START, 1 = Tag1, ..., totalDays = TagN, totalDays+1 = FINISH
   const mePos = Math.min(totalTiles - 1, Math.max(0, meDone));
   const otherPos = other ? Math.min(totalTiles - 1, Math.max(0, otherDone)) : -1;
 
   const meToken = tokenEmoji(meRow.avatar?.token);
   const otherToken = other ? tokenEmoji(other.avatar?.token) : "👤";
 
-  const boardTiles = tiles
-    .map((t, i) => {
-      const row = Math.floor(i / BOARD_COLS);
-      const col = i % BOARD_COLS;
-      const serpCol = row % 2 === 0 ? col : BOARD_COLS - 1 - col;
+  const boardTiles = tiles.map((t, i) => {
+    const row = Math.floor(i / BOARD_COLS);
+    const col = i % BOARD_COLS;
+    const serpCol = row % 2 === 0 ? col : BOARD_COLS - 1 - col;
 
-      const gridCol = serpCol + 1;
-      const gridRow = row + 1;
+    const gridCol = serpCol + 1;
+    const gridRow = row + 1;
 
-      const showMe = i === mePos;
-      const showOther = other && i === otherPos;
+    const showMe = i === mePos;
+    const showOther = other && i === otherPos;
 
-      if (t.type === "start") {
-        return `
-          <div
-            style="grid-column:${gridCol}; grid-row:${gridRow};"
-            class="relative rounded-2xl border p-2 sm:p-3 bg-slate-900 text-white border-slate-700">
-            <div class="text-xs font-semibold text-white/80">START</div>
-            <div class="text-2xl font-extrabold mt-1">🚦</div>
-            <div class="absolute -top-3 left-3 flex gap-1 text-2xl select-none">
-              ${showMe ? `<span title="Du">${meToken}</span>` : ""}
-              ${showOther ? `<span title="${other?.nickname ?? "Mitspieler"}">${otherToken}</span>` : ""}
-            </div>
-          </div>
-        `;
-      }
-
-      if (t.type === "finish") {
-        return `
-          <div
-            style="grid-column:${gridCol}; grid-row:${gridRow};"
-            class="relative rounded-2xl border p-2 sm:p-3 bg-purple-600 text-white border-purple-400">
-            <div class="text-xs font-semibold text-white/80">FINISH</div>
-            <div class="text-2xl font-extrabold mt-1">🏁</div>
-            <div class="absolute -top-3 left-3 flex gap-1 text-2xl select-none">
-              ${showMe ? `<span title="Du">${meToken}</span>` : ""}
-              ${showOther ? `<span title="${other?.nickname ?? "Mitspieler"}">${otherToken}</span>` : ""}
-            </div>
-          </div>
-        `;
-      }
-
-      // day tile
-      const d = t.d;
-      const dayKey = formatDateLocal(d);
-      const dayNum = d.getDate();
-
-      const meK = `${meRow.id}:${dayKey}`;
-      const otherK = other ? `${other.id}:${dayKey}` : null;
-
-      const meOn = STATE.checkins.get(meK) === true;
-      const otherOn = otherK ? STATE.checkins.get(otherK) === true : false;
-
-      const isMonday = d.getDay() === 1;
-
+    if (t.type === "start") {
       return `
-        <button type="button" data-day="${dayKey}"
-          style="grid-column:${gridCol}; grid-row:${gridRow};"
-          class="relative rounded-2xl border p-2 sm:p-3 text-left touch-manipulation
-            ${meOn
-              ? "bg-emerald-500 text-white border-emerald-400"
-              : "bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-800 hover:bg-slate-50 dark:hover:bg-slate-800"}
-            ${isMonday ? "ring-2 ring-purple-400/70" : ""}">
-          <div class="text-xs font-semibold ${meOn ? "text-white/80" : "text-slate-400"}">TAG</div>
-          <div class="text-xl sm:text-2xl font-extrabold mt-1">${dayNum}</div>
-
-          <div class="mt-3 flex items-center gap-2">
-            <span class="hidden sm:inline text-xs font-bold ${meOn ? "text-white" : "text-slate-600 dark:text-slate-300"}">Du</span>
-            <span class="w-3 h-3 rounded-full ${meOn ? "bg-white" : "bg-slate-200 dark:bg-slate-700"}"></span>
-
-            <span class="hidden sm:inline ml-3 text-xs font-bold ${meOn ? "text-white" : "text-slate-600 dark:text-slate-300"}">${other ? other.nickname : "—"}</span>
-            <span class="w-3 h-3 rounded-full ${otherOn ? (meOn ? "bg-white/90" : "bg-purple-500") : "bg-slate-200 dark:bg-slate-700"}"></span>
-          </div>
-
+        <div style="grid-column:${gridCol}; grid-row:${gridRow};"
+          class="relative rounded-2xl border p-2 sm:p-3 bg-slate-900 text-white border-slate-700">
+          <div class="text-xs font-semibold text-white/80">START</div>
+          <div class="text-2xl font-extrabold mt-1">🚦</div>
           <div class="absolute -top-3 left-3 flex gap-1 text-2xl select-none">
             ${showMe ? `<span title="Du">${meToken}</span>` : ""}
             ${showOther ? `<span title="${other?.nickname ?? "Mitspieler"}">${otherToken}</span>` : ""}
           </div>
-
-          <div class="absolute top-2 right-2 text-sm ${meOn ? "opacity-100" : "opacity-30"}">✅</div>
-        </button>
+        </div>
       `;
-    })
-    .join("");
+    }
+
+    if (t.type === "finish") {
+      return `
+        <div style="grid-column:${gridCol}; grid-row:${gridRow};"
+          class="relative rounded-2xl border p-2 sm:p-3 bg-purple-600 text-white border-purple-400">
+          <div class="text-xs font-semibold text-white/80">FINISH</div>
+          <div class="text-2xl font-extrabold mt-1">🏁</div>
+          <div class="absolute -top-3 left-3 flex gap-1 text-2xl select-none">
+            ${showMe ? `<span title="Du">${meToken}</span>` : ""}
+            ${showOther ? `<span title="${other?.nickname ?? "Mitspieler"}">${otherToken}</span>` : ""}
+          </div>
+        </div>
+      `;
+    }
+
+    const d = t.d;
+    const dayKey = formatDateLocal(d);
+    const dayNum = d.getDate();
+
+    const meK = `${meRow.id}:${dayKey}`;
+    const otherK = other ? `${other.id}:${dayKey}` : null;
+
+    const meOn = STATE.checkins.get(meK) === true;
+    const otherOn = otherK ? STATE.checkins.get(otherK) === true : false;
+
+    const isMonday = d.getDay() === 1;
+
+    return `
+      <button type="button" data-day="${dayKey}"
+        style="grid-column:${gridCol}; grid-row:${gridRow};"
+        class="relative rounded-2xl border p-2 sm:p-3 text-left touch-manipulation
+          ${meOn
+            ? "bg-emerald-500 text-white border-emerald-400"
+            : "bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-800 hover:bg-slate-50 dark:hover:bg-slate-800"}
+          ${isMonday ? "ring-2 ring-purple-400/70" : ""}">
+        <div class="text-xs font-semibold ${meOn ? "text-white/80" : "text-slate-400"}">TAG</div>
+        <div class="text-xl sm:text-2xl font-extrabold mt-1">${dayNum}</div>
+
+        <div class="mt-3 flex items-center gap-2">
+          <span class="hidden sm:inline text-xs font-bold ${meOn ? "text-white" : "text-slate-600 dark:text-slate-300"}">Du</span>
+          <span class="w-3 h-3 rounded-full ${meOn ? "bg-white" : "bg-slate-200 dark:bg-slate-700"}"></span>
+
+          <span class="hidden sm:inline ml-3 text-xs font-bold ${meOn ? "text-white" : "text-slate-600 dark:text-slate-300"}">${other ? other.nickname : "—"}</span>
+          <span class="w-3 h-3 rounded-full ${otherOn ? (meOn ? "bg-white/90" : "bg-purple-500") : "bg-slate-200 dark:bg-slate-700"}"></span>
+        </div>
+
+        <div class="absolute -top-3 left-3 flex gap-1 text-2xl select-none">
+          ${showMe ? `<span title="Du">${meToken}</span>` : ""}
+          ${showOther ? `<span title="${other?.nickname ?? "Mitspieler"}">${otherToken}</span>` : ""}
+        </div>
+
+        <div class="absolute top-2 right-2 text-sm ${meOn ? "opacity-100" : "opacity-30"}">✅</div>
+      </button>
+    `;
+  }).join("");
 
   const myTokenId = meRow.avatar?.token ?? "Bob";
   const tokenModalCards = TOKEN_OPTIONS.map((t) => {
@@ -629,14 +641,10 @@ function renderDashboard() {
         <div class="p-4 rounded-2xl border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-950">
           <p class="text-sm text-slate-500 dark:text-slate-400">Ranking</p>
           <p class="text-xl font-extrabold mt-1">${leader}</p>
-          <p class="text-xs text-slate-500 dark:text-slate-400 mt-2">
-          </p>
         </div>
       </div>
 
-      <!-- BOARD -->
-      <div id="daysGrid"
-        class="grid gap-2 sm:gap-3"
+      <div id="daysGrid" class="grid gap-2 sm:gap-3"
         style="grid-template-columns: repeat(${BOARD_COLS}, minmax(0, 1fr));">
         ${boardTiles}
       </div>
@@ -645,7 +653,6 @@ function renderDashboard() {
         Tippe auf ein Feld (Tag), um <b>deinen</b> Status zu toggeln. Mitspieler ist read-only.
       </p>
 
-      <!-- TOKEN MODAL -->
       <div id="tokenModal"
         class="fixed inset-0 z-50 hidden items-end md:items-center justify-center p-4 pointer-events-none">
         <div class="absolute inset-0 bg-black/40"></div>
@@ -680,7 +687,6 @@ function renderDashboard() {
 /* =========================
    6) EVENTS (DELEGATION)
    ========================= */
-// iOS: Click kommt oft nach Pointerup → doppelt verhindern
 let lastPointerTs = 0;
 
 function openTokenModal() {
@@ -702,11 +708,9 @@ function closeTokenModal() {
 async function handleActionFromEvent(ev) {
   const t = ev.target;
 
-  // Join/Create Buttons
   if (t?.id === "btnJoin") return joinRoomFlow();
   if (t?.id === "btnCreate") return createRoomFlow();
 
-  // Dashboard Buttons
   if (t?.id === "btnCopy") {
     try {
       await navigator.clipboard.writeText(STATE.room?.code ?? "");
@@ -732,7 +736,6 @@ async function handleActionFromEvent(ev) {
   if (t?.id === "btnToken") return openTokenModal();
   if (t?.id === "btnTokenClose" || t?.id === "btnTokenClose2") return closeTokenModal();
 
-  // Token pick
   const tokenBtn = t.closest?.("[data-token]");
   if (tokenBtn) {
     const tokenId = tokenBtn.getAttribute("data-token");
@@ -748,27 +751,24 @@ async function handleActionFromEvent(ev) {
     return;
   }
 
-  // Day tile toggle
   const dayBtn = t.closest?.("[data-day]");
   if (dayBtn) {
     const dayStr = dayBtn.getAttribute("data-day");
     if (!dayStr) return;
-    try {
-      const daysArr = monthDays(TRACK_YEAR, TRACK_MONTH_INDEX);
-      const beforeDone = computeProgress(STATE.me.id, daysArr);
 
-      const daysArr = monthDays(TRACK_YEAR, TRACK_MONTH_INDEX);
-      const beforeDone = computeProgress(STATE.me.id, daysArr);
+    try {
+      const monthArr = monthDays(TRACK_YEAR, TRACK_MONTH_INDEX);
+      const beforeDone = computeProgress(STATE.me.id, monthArr);
 
       await toggleMyDay(dayStr);
 
       const k = `${STATE.me.id}:${dayStr}`;
       STATE.checkins.set(k, !(STATE.checkins.get(k) === true));
 
-      const afterDone = computeProgress(STATE.me.id, daysArr);
+      const afterDone = computeProgress(STATE.me.id, monthArr);
 
       if (afterDone > beforeDone && afterDone % 7 === 0) {
-      burstConfetti();
+        burstConfetti();
       }
 
       renderDashboard();
@@ -779,13 +779,16 @@ async function handleActionFromEvent(ev) {
   }
 }
 
-document.addEventListener("pointerup", (ev) => {
-  lastPointerTs = Date.now();
-  handleActionFromEvent(ev);
-}, { passive: true });
+document.addEventListener(
+  "pointerup",
+  (ev) => {
+    lastPointerTs = Date.now();
+    handleActionFromEvent(ev);
+  },
+  { passive: true }
+);
 
 document.addEventListener("click", (ev) => {
-  // ignorier click, wenn kurz vorher pointerup kam
   if (Date.now() - lastPointerTs < 500) return;
   handleActionFromEvent(ev);
 });
