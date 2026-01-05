@@ -259,7 +259,7 @@ function toast(text) {
   alert(text);
 }
 
-/* ===== Confetti (Milestone: every 7th done day) ===== */
+/* ===== Confetti + Finish Banner ===== */
 function ensureConfettiRoot() {
   let root = document.getElementById("confetti");
   if (!root) {
@@ -276,13 +276,12 @@ function ensureConfettiRoot() {
   return root;
 }
 
-function burstConfetti() {
+function burstConfetti(pieces = 70) {
   const root = ensureConfettiRoot();
   root.innerHTML = "";
   root.style.display = "block";
 
-  const pieces = 70;
-  const duration = 1200;
+  const duration = 1400;
 
   for (let i = 0; i < pieces; i++) {
     const p = document.createElement("div");
@@ -295,7 +294,7 @@ function burstConfetti() {
     p.style.opacity = "0.95";
     p.style.background = `hsl(${Math.floor(Math.random() * 360)}, 90%, 60%)`;
 
-    const fall = 70 + Math.random() * 45;
+    const fall = 70 + Math.random() * 50;
     const drift = -20 + Math.random() * 40;
     const rot = -360 + Math.random() * 720;
 
@@ -305,7 +304,7 @@ function burstConfetti() {
         { transform: `translate(${drift}vw, ${fall}vh) rotate(${rot}deg)` },
       ],
       {
-        duration: duration + Math.random() * 400,
+        duration: duration + Math.random() * 500,
         easing: "cubic-bezier(.2,.8,.2,1)",
       }
     );
@@ -316,7 +315,60 @@ function burstConfetti() {
   setTimeout(() => {
     root.style.display = "none";
     root.innerHTML = "";
-  }, duration + 500);
+  }, duration + 700);
+}
+
+function ensureFinishBanner() {
+  let b = document.getElementById("finishBanner");
+  if (!b) {
+    b = document.createElement("div");
+    b.id = "finishBanner";
+    b.style.position = "fixed";
+    b.style.left = "50%";
+    b.style.top = "16px";
+    b.style.transform = "translate(-50%, -120px)";
+    b.style.zIndex = "10000";
+    b.style.pointerEvents = "none";
+    b.style.opacity = "0";
+    b.style.transition = "transform 420ms cubic-bezier(.2,.9,.2,1), opacity 220ms ease";
+    b.style.maxWidth = "92vw";
+    b.innerHTML = `
+      <div style="
+        display:flex; align-items:center; gap:10px;
+        padding:12px 16px;
+        border-radius:16px;
+        background: rgba(15, 23, 42, 0.88);
+        color: white;
+        border: 1px solid rgba(148, 163, 184, 0.35);
+        backdrop-filter: blur(6px);
+        box-shadow: 0 18px 40px rgba(0,0,0,0.35);
+        font-weight: 800;
+        letter-spacing: 0.2px;
+      ">
+        <span style="font-size:22px;">🏁</span>
+        <span style="font-size:14px; line-height:1.2;">
+          ZIEL ERREICHT! <span style="opacity:.8; font-weight:700;">Du hast den Monat durchgezogen.</span>
+        </span>
+      </div>
+    `;
+    document.body.appendChild(b);
+  }
+  return b;
+}
+
+function showFinishBanner() {
+  const b = ensureFinishBanner();
+  // reinfliegen
+  requestAnimationFrame(() => {
+    b.style.opacity = "1";
+    b.style.transform = "translate(-50%, 0)";
+  });
+
+  // kurz halten, dann raus
+  setTimeout(() => {
+    b.style.opacity = "0";
+    b.style.transform = "translate(-50%, -120px)";
+  }, 1800);
 }
 
 function computeProgress(playerId, daysArr) {
@@ -451,7 +503,9 @@ async function enterRoom(room, nickname) {
 
   // Token default: wenn keiner gesetzt, nehmen wir "Bob"
   const existingToken = STATE.me?.avatar?.token;
-  const initialAvatar = existingToken ? { token: existingToken } : { token: "Bob" };
+  const initialAvatar = existingToken
+    ? { token: existingToken }
+    : { token: "Bob" };
 
   const me = await upsertPlayer(room.id, nickname, initialAvatar);
   localStorage.setItem(LS.playerId, me.id);
@@ -488,116 +542,158 @@ function renderDashboard() {
 
   const leader =
     other
-      ? (meDone === otherDone
-          ? "Gleichstand 🤝"
-          : (meDone > otherDone
-              ? `${meRow.nickname} führt 🏁`
-              : `${other.nickname} führt 🏁`))
+      ? meDone === otherDone
+        ? "Gleichstand 🤝"
+        : meDone > otherDone
+        ? `${meRow.nickname} führt 🏁`
+        : `${other.nickname} führt 🏁`
       : "Warte auf Mitspieler…";
 
-  const tiles = [{ type: "start" }, ...monthArr.map((d) => ({ type: "day", d })), { type: "finish" }];
+  const tiles = [
+    { type: "start" },
+    ...monthArr.map((d) => ({ type: "day", d })),
+    { type: "finish" },
+  ];
   const totalTiles = tiles.length;
 
   const mePos = Math.min(totalTiles - 1, Math.max(0, meDone));
-  const otherPos = other ? Math.min(totalTiles - 1, Math.max(0, otherDone)) : -1;
+  const otherPos = other
+    ? Math.min(totalTiles - 1, Math.max(0, otherDone))
+    : -1;
 
   const meToken = tokenEmoji(meRow.avatar?.token);
   const otherToken = other ? tokenEmoji(other.avatar?.token) : "👤";
 
-  const boardTiles = tiles.map((t, i) => {
-    const row = Math.floor(i / BOARD_COLS);
-    const col = i % BOARD_COLS;
-    const serpCol = row % 2 === 0 ? col : BOARD_COLS - 1 - col;
+  const boardTiles = tiles
+    .map((t, i) => {
+      const row = Math.floor(i / BOARD_COLS);
+      const col = i % BOARD_COLS;
+      const serpCol = row % 2 === 0 ? col : BOARD_COLS - 1 - col;
 
-    const gridCol = serpCol + 1;
-    const gridRow = row + 1;
+      const gridCol = serpCol + 1;
+      const gridRow = row + 1;
 
-    const showMe = i === mePos;
-    const showOther = other && i === otherPos;
+      const showMe = i === mePos;
+      const showOther = other && i === otherPos;
 
-    if (t.type === "start") {
-      return `
+      if (t.type === "start") {
+        return `
         <div style="grid-column:${gridCol}; grid-row:${gridRow};"
           class="relative rounded-2xl border p-2 sm:p-3 bg-slate-900 text-white border-slate-700">
           <div class="text-xs font-semibold text-white/80">START</div>
           <div class="text-2xl font-extrabold mt-1">🚦</div>
           <div class="absolute -top-3 left-3 flex gap-1 text-2xl select-none">
             ${showMe ? `<span title="Du">${meToken}</span>` : ""}
-            ${showOther ? `<span title="${other?.nickname ?? "Mitspieler"}">${otherToken}</span>` : ""}
+            ${
+              showOther
+                ? `<span title="${other?.nickname ?? "Mitspieler"}">${otherToken}</span>`
+                : ""
+            }
           </div>
         </div>
       `;
-    }
+      }
 
-    if (t.type === "finish") {
-      return `
+      if (t.type === "finish") {
+        return `
         <div style="grid-column:${gridCol}; grid-row:${gridRow};"
           class="relative rounded-2xl border p-2 sm:p-3 bg-purple-600 text-white border-purple-400">
           <div class="text-xs font-semibold text-white/80">FINISH</div>
           <div class="text-2xl font-extrabold mt-1">🏁</div>
           <div class="absolute -top-3 left-3 flex gap-1 text-2xl select-none">
             ${showMe ? `<span title="Du">${meToken}</span>` : ""}
-            ${showOther ? `<span title="${other?.nickname ?? "Mitspieler"}">${otherToken}</span>` : ""}
+            ${
+              showOther
+                ? `<span title="${other?.nickname ?? "Mitspieler"}">${otherToken}</span>`
+                : ""
+            }
           </div>
         </div>
       `;
-    }
+      }
 
-    const d = t.d;
-    const dayKey = formatDateLocal(d);
-    const dayNum = d.getDate();
+      const d = t.d;
+      const dayKey = formatDateLocal(d);
+      const dayNum = d.getDate();
 
-    const meK = `${meRow.id}:${dayKey}`;
-    const otherK = other ? `${other.id}:${dayKey}` : null;
+      const meK = `${meRow.id}:${dayKey}`;
+      const otherK = other ? `${other.id}:${dayKey}` : null;
 
-    const meOn = STATE.checkins.get(meK) === true;
-    const otherOn = otherK ? STATE.checkins.get(otherK) === true : false;
+      const meOn = STATE.checkins.get(meK) === true;
+      const otherOn = otherK ? STATE.checkins.get(otherK) === true : false;
 
-    const isMonday = d.getDay() === 1;
+      const isMonday = d.getDay() === 1;
 
-    return `
+      return `
       <button type="button" data-day="${dayKey}"
         style="grid-column:${gridCol}; grid-row:${gridRow};"
         class="relative rounded-2xl border p-2 sm:p-3 text-left touch-manipulation
-          ${meOn
-            ? "bg-emerald-500 text-white border-emerald-400"
-            : "bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-800 hover:bg-slate-50 dark:hover:bg-slate-800"}
+          ${
+            meOn
+              ? "bg-emerald-500 text-white border-emerald-400"
+              : "bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-800 hover:bg-slate-50 dark:hover:bg-slate-800"
+          }
           ${isMonday ? "ring-2 ring-purple-400/70" : ""}">
-        <div class="text-xs font-semibold ${meOn ? "text-white/80" : "text-slate-400"}">TAG</div>
+        <div class="text-xs font-semibold ${
+          meOn ? "text-white/80" : "text-slate-400"
+        }">TAG</div>
         <div class="text-xl sm:text-2xl font-extrabold mt-1">${dayNum}</div>
 
         <div class="mt-3 flex items-center gap-2">
-          <span class="hidden sm:inline text-xs font-bold ${meOn ? "text-white" : "text-slate-600 dark:text-slate-300"}">Du</span>
-          <span class="w-3 h-3 rounded-full ${meOn ? "bg-white" : "bg-slate-200 dark:bg-slate-700"}"></span>
+          <span class="hidden sm:inline text-xs font-bold ${
+            meOn ? "text-white" : "text-slate-600 dark:text-slate-300"
+          }">Du</span>
+          <span class="w-3 h-3 rounded-full ${
+            meOn ? "bg-white" : "bg-slate-200 dark:bg-slate-700"
+          }"></span>
 
-          <span class="hidden sm:inline ml-3 text-xs font-bold ${meOn ? "text-white" : "text-slate-600 dark:text-slate-300"}">${other ? other.nickname : "—"}</span>
-          <span class="w-3 h-3 rounded-full ${otherOn ? (meOn ? "bg-white/90" : "bg-purple-500") : "bg-slate-200 dark:bg-slate-700"}"></span>
+          <span class="hidden sm:inline ml-3 text-xs font-bold ${
+            meOn ? "text-white" : "text-slate-600 dark:text-slate-300"
+          }">${other ? other.nickname : "—"}</span>
+          <span class="w-3 h-3 rounded-full ${
+            otherOn
+              ? meOn
+                ? "bg-white/90"
+                : "bg-purple-500"
+              : "bg-slate-200 dark:bg-slate-700"
+          }"></span>
         </div>
 
         <div class="absolute -top-3 left-3 flex gap-1 text-2xl select-none">
           ${showMe ? `<span title="Du">${meToken}</span>` : ""}
-          ${showOther ? `<span title="${other?.nickname ?? "Mitspieler"}">${otherToken}</span>` : ""}
+          ${
+            showOther
+              ? `<span title="${other?.nickname ?? "Mitspieler"}">${otherToken}</span>`
+              : ""
+          }
         </div>
 
-        <div class="absolute top-2 right-2 text-sm ${meOn ? "opacity-100" : "opacity-30"}">✅</div>
+        <div class="absolute top-2 right-2 text-sm ${
+          meOn ? "opacity-100" : "opacity-30"
+        }">✅</div>
       </button>
     `;
-  }).join("");
+    })
+    .join("");
 
   const myTokenId = meRow.avatar?.token ?? "Bob";
-  const tokenModalCards = TOKEN_OPTIONS.map((t) => {
-    const active = t.id === myTokenId;
-    return `
+  const tokenModalCards = TOKEN_OPTIONS
+    .map((t) => {
+      const active = t.id === myTokenId;
+      return `
       <button type="button" data-token="${t.id}"
         class="flex items-center justify-between rounded-2xl border px-4 py-3
-          ${active
-            ? "bg-emerald-500 text-white border-emerald-400"
-            : "bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-800 hover:bg-slate-50 dark:hover:bg-slate-800"}">
+          ${
+            active
+              ? "bg-emerald-500 text-white border-emerald-400"
+              : "bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-800 hover:bg-slate-50 dark:hover:bg-slate-800"
+          }">
         <span class="text-lg font-extrabold">${t.emoji} <span class="text-sm font-semibold">${t.label}</span></span>
         <span class="text-xs font-bold opacity-70">${t.id}</span>
       </button>
     `;
-  }).join("");
+    })
+    .join("");
 
   setApp(`
     <div class="grid gap-4">
@@ -632,10 +728,18 @@ function renderDashboard() {
         </div>
 
         <div class="p-4 rounded-2xl border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-950">
-          <p class="text-sm text-slate-500 dark:text-slate-400">${other ? other.nickname : "Mitspieler"}</p>
-          <p class="text-2xl font-extrabold mt-1">${other ? `${otherDone}/${totalDays}` : "—"}</p>
-          <p class="text-sm mt-2">Streak: <span class="font-bold">${other ? otherStreak : "—"}</span> 🔥</p>
-          <p class="text-sm">Woche: <span class="font-bold">${other ? otherWeek : "—"}</span></p>
+          <p class="text-sm text-slate-500 dark:text-slate-400">${
+            other ? other.nickname : "Mitspieler"
+          }</p>
+          <p class="text-2xl font-extrabold mt-1">${
+            other ? `${otherDone}/${totalDays}` : "—"
+          }</p>
+          <p class="text-sm mt-2">Streak: <span class="font-bold">${
+            other ? otherStreak : "—"
+          }</span> 🔥</p>
+          <p class="text-sm">Woche: <span class="font-bold">${
+            other ? otherWeek : "—"
+          }</span></p>
         </div>
 
         <div class="p-4 rounded-2xl border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-950">
@@ -734,7 +838,8 @@ async function handleActionFromEvent(ev) {
   }
 
   if (t?.id === "btnToken") return openTokenModal();
-  if (t?.id === "btnTokenClose" || t?.id === "btnTokenClose2") return closeTokenModal();
+  if (t?.id === "btnTokenClose" || t?.id === "btnTokenClose2")
+    return closeTokenModal();
 
   const tokenBtn = t.closest?.("[data-token]");
   if (tokenBtn) {
@@ -758,6 +863,7 @@ async function handleActionFromEvent(ev) {
 
     try {
       const monthArr = monthDays(TRACK_YEAR, TRACK_MONTH_INDEX);
+      const totalDays = monthArr.length;
       const beforeDone = computeProgress(STATE.me.id, monthArr);
 
       await toggleMyDay(dayStr);
@@ -767,8 +873,14 @@ async function handleActionFromEvent(ev) {
 
       const afterDone = computeProgress(STATE.me.id, monthArr);
 
-      if (afterDone > beforeDone && afterDone % 7 === 0) {
-        burstConfetti();
+      // FINISH: nur wenn du das Ziel neu erreichst
+      if (afterDone > beforeDone && afterDone === totalDays) {
+        showFinishBanner();
+        burstConfetti(180); // mehr Wumms am Ende
+      }
+      // Milestones: jede 7 Tage (aber nicht am Finish doppelt)
+      else if (afterDone > beforeDone && afterDone % 7 === 0) {
+        burstConfetti(70);
       }
 
       renderDashboard();
