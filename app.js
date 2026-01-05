@@ -8,12 +8,7 @@ const SUPABASE_ANON_KEY = "sb_publishable_EVhNmgA6RjiNSZFAVvpzMQ_P-OC4WAd";
 const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
 /* =========================
-   1) A2HS (iOS)
-   ========================= */
-const A2HS_KEY = "sober_a2hs_dismissed_v1";
-
-/* =========================
-   2) HELPERS / STATE
+   1) HELPERS / STATE
    ========================= */
 const LS = {
   deviceId: "sober_device_id",
@@ -31,35 +26,15 @@ const TOKEN_OPTIONS = [
 ];
 
 function tokenEmoji(tokenId) {
-  return (TOKEN_OPTIONS.find(t => t.id === tokenId)?.emoji) ?? "🙂";
-}
-
-async function setMyToken(tokenId) {
-  if (!STATE.room || !STATE.me) return;
-  const device_id = getDeviceId();
-  const { data, error } = await supabase
-    .from("players")
-    .upsert(
-      {
-        room_id: STATE.room.id,
-        device_id,
-        nickname: STATE.me.nickname,
-        avatar: { ...(STATE.me.avatar || {}), token: tokenId },
-      },
-      { onConflict: "room_id,device_id" }
-    )
-    .select("*")
-    .single();
-  if (error) throw error;
-  STATE.me = data;
-  // players neu laden, damit der andere auch korrekt angezeigt wird
-  STATE.players = await loadPlayers(STATE.room.id);
+  return TOKEN_OPTIONS.find((t) => t.id === tokenId)?.emoji ?? "🙂";
 }
 
 function getDeviceId() {
   let id = localStorage.getItem(LS.deviceId);
   if (!id) {
-    id = (crypto?.randomUUID?.() ?? `dev_${Math.random().toString(16).slice(2)}_${Date.now()}`);
+    id =
+      crypto?.randomUUID?.() ??
+      `dev_${Math.random().toString(16).slice(2)}_${Date.now()}`;
     localStorage.setItem(LS.deviceId, id);
   }
   return id;
@@ -96,7 +71,7 @@ function monthDays(year, monthIndex) {
 function getWeekRangeMonSun(date = new Date()) {
   const d = new Date(date);
   const day = d.getDay();
-  const diffToMon = (day === 0 ? -6 : 1 - day);
+  const diffToMon = day === 0 ? -6 : 1 - day;
   const mon = new Date(d);
   mon.setDate(d.getDate() + diffToMon);
   mon.setHours(0, 0, 0, 0);
@@ -116,12 +91,15 @@ const STATE = {
   channel: null,
 };
 
-// Februar fix (du kannst es später dynamisch machen)
+// Februar fix
 const TRACK_MONTH_INDEX = 1; // 0=Jan, 1=Feb
 const TRACK_YEAR = new Date().getFullYear();
 
+// Board Layout
+const BOARD_COLS = 7;
+
 /* =========================
-   3) DATA ACCESS
+   2) DATA ACCESS
    ========================= */
 async function getRoomByCode(code) {
   const { data, error } = await supabase
@@ -143,13 +121,13 @@ async function createRoom(code) {
   return data;
 }
 
-async function upsertPlayer(roomId, nickname) {
+async function upsertPlayer(roomId, nickname, avatar = {}) {
   const device_id = getDeviceId();
 
   const { data, error } = await supabase
     .from("players")
     .upsert(
-      { room_id: roomId, nickname, device_id, avatar: {} },
+      { room_id: roomId, nickname, device_id, avatar },
       { onConflict: "room_id,device_id" }
     )
     .select("*")
@@ -215,8 +193,16 @@ async function toggleMyDay(dayStr) {
   if (error) throw error;
 }
 
+async function setMyToken(tokenId) {
+  if (!STATE.room || !STATE.me) return;
+  const nextAvatar = { ...(STATE.me.avatar || {}), token: tokenId };
+  const updated = await upsertPlayer(STATE.room.id, STATE.me.nickname, nextAvatar);
+  STATE.me = updated;
+  STATE.players = await loadPlayers(STATE.room.id);
+}
+
 /* =========================
-   4) REALTIME
+   3) REALTIME
    ========================= */
 function subscribeRoom(roomId) {
   if (STATE.channel) {
@@ -228,14 +214,17 @@ function subscribeRoom(roomId) {
     .channel(`room:${roomId}`)
     .on(
       "postgres_changes",
-      {
-        event: "*",
-        schema: "public",
-        table: "checkins",
-        filter: `room_id=eq.${roomId}`,
-      },
+      { event: "*", schema: "public", table: "checkins", filter: `room_id=eq.${roomId}` },
       async () => {
         STATE.checkins = await loadCheckins(roomId);
+        STATE.players = await loadPlayers(roomId);
+        renderDashboard();
+      }
+    )
+    .on(
+      "postgres_changes",
+      { event: "*", schema: "public", table: "players", filter: `room_id=eq.${roomId}` },
+      async () => {
         STATE.players = await loadPlayers(roomId);
         renderDashboard();
       }
@@ -244,7 +233,7 @@ function subscribeRoom(roomId) {
 }
 
 /* =========================
-   5) UI
+   4) UI HELPERS
    ========================= */
 function setApp(html) {
   const root = document.getElementById("app");
@@ -255,6 +244,47 @@ function toast(text) {
   alert(text);
 }
 
+function computeProgress(playerId, daysArr) {
+  let done = 0;
+  for (const d of daysArr) {
+    const k = `${playerId}:${formatDateLocal(d)}`;
+    if (STATE.checkins.get(k) === true) done++;
+  }
+  return done;
+}
+
+function computeStreak(playerId, daysArr) {
+  const todayKey = formatDateLocal(new Date());
+  const filtered = daysArr
+    .map((d) => formatDateLocal(d))
+    .filter((k) => k <= todayKey)
+    .reverse();
+
+  let streak = 0;
+  for (const dayKey of filtered) {
+    const k = `${playerId}:${dayKey}`;
+    if (STATE.checkins.get(k) === true) streak++;
+    else break;
+  }
+  return streak;
+}
+
+function computeWeekCount(playerId) {
+  const { mon, sun } = getWeekRangeMonSun(new Date());
+  let c = 0;
+  for (const [k, v] of STATE.checkins.entries()) {
+    if (!v) continue;
+    const [pid, dayStr] = k.split(":");
+    if (pid !== playerId) continue;
+    const d = new Date(dayStr + "T00:00:00");
+    if (d >= mon && d <= sun) c++;
+  }
+  return c;
+}
+
+/* =========================
+   5) SCREENS
+   ========================= */
 function renderJoin() {
   const savedCode = localStorage.getItem(LS.roomCode) ?? "";
   const savedNick = localStorage.getItem(LS.nickname) ?? "";
@@ -279,11 +309,11 @@ function renderJoin() {
             placeholder="z.B. Max" />
 
           <div class="mt-3 flex gap-2">
-            <button id="btnJoin"
+            <button id="btnJoin" type="button"
               class="flex-1 rounded-2xl px-4 py-3 font-bold bg-slate-900 text-white hover:opacity-90">
               Beitreten
             </button>
-            <button id="btnCreate"
+            <button id="btnCreate" type="button"
               class="rounded-2xl px-4 py-3 font-semibold border border-slate-200 dark:border-slate-800 hover:bg-slate-100 dark:hover:bg-slate-800">
               Neuer Room
             </button>
@@ -296,9 +326,6 @@ function renderJoin() {
       </div>
     </div>
   `);
-
-  document.getElementById("btnJoin")?.addEventListener("click", joinRoomFlow);
-  document.getElementById("btnCreate")?.addEventListener("click", createRoomFlow);
 }
 
 async function joinRoomFlow() {
@@ -346,7 +373,11 @@ async function enterRoom(room, nickname) {
   localStorage.setItem(LS.roomCode, room.code);
   localStorage.setItem(LS.nickname, nickname);
 
-  const me = await upsertPlayer(room.id, nickname);
+  // Token default: wenn keiner gesetzt, nehmen wir "car"
+  const existingToken = STATE.me?.avatar?.token;
+  const initialAvatar = existingToken ? { token: existingToken } : { token: "car" };
+
+  const me = await upsertPlayer(room.id, nickname, initialAvatar);
   localStorage.setItem(LS.playerId, me.id);
 
   STATE.room = room;
@@ -358,44 +389,6 @@ async function enterRoom(room, nickname) {
   renderDashboard();
 }
 
-function computeProgress(playerId, daysArr) {
-  let done = 0;
-  for (const d of daysArr) {
-    const k = `${playerId}:${formatDateLocal(d)}`;
-    if (STATE.checkins.get(k) === true) done++;
-  }
-  return done;
-}
-
-function computeStreak(playerId, daysArr) {
-  const todayKey = formatDateLocal(new Date());
-  const filtered = daysArr
-    .map(d => formatDateLocal(d))
-    .filter(k => k <= todayKey)
-    .reverse();
-
-  let streak = 0;
-  for (const dayKey of filtered) {
-    const k = `${playerId}:${dayKey}`;
-    if (STATE.checkins.get(k) === true) streak++;
-    else break;
-  }
-  return streak;
-}
-
-function computeWeekCount(playerId) {
-  const { mon, sun } = getWeekRangeMonSun(new Date());
-  let c = 0;
-  for (const [k, v] of STATE.checkins.entries()) {
-    if (!v) continue;
-    const [pid, dayStr] = k.split(":");
-    if (pid !== playerId) continue;
-    const d = new Date(dayStr + "T00:00:00");
-    if (d >= mon && d <= sun) c++;
-  }
-  return c;
-}
-
 function renderDashboard() {
   const room = STATE.room;
   const me = STATE.me;
@@ -405,8 +398,8 @@ function renderDashboard() {
   const totalDays = daysArr.length;
 
   const players = STATE.players.slice(0, 2);
-  const meRow = players.find(p => p.id === me.id) ?? me;
-  const other = players.find(p => p.id !== me.id) ?? null;
+  const meRow = players.find((p) => p.id === me.id) ?? me;
+  const other = players.find((p) => p.id !== me.id) ?? null;
 
   const meDone = computeProgress(meRow.id, daysArr);
   const otherDone = other ? computeProgress(other.id, daysArr) : 0;
@@ -417,80 +410,124 @@ function renderDashboard() {
   const meWeek = computeWeekCount(meRow.id);
   const otherWeek = other ? computeWeekCount(other.id) : 0;
 
+  // Mini-Ranking = Monat
   const leader =
-  other
-    ? (meDone === otherDone
-        ? "Gleichstand 🤝"
-        : (meDone > otherDone ? `${meRow.nickname} führt 🏁` : `${other.nickname} führt 🏁`))
-    : "Warte auf Mitspieler…";
+    other
+      ? (meDone === otherDone
+          ? "Gleichstand 🤝"
+          : (meDone > otherDone ? `${meRow.nickname} führt 🏁` : `${other.nickname} führt 🏁`))
+      : "Warte auf Mitspieler…";
 
-  const COLS = 7; // Breite des Spielfelds (z.B. 7 wie Kalender)
-const total = daysArr.length;
+  // Board tiles: START + Tage + FINISH
+  const tiles = [{ type: "start" }, ...daysArr.map((d) => ({ type: "day", d })), { type: "finish" }];
+  const totalTiles = tiles.length;
 
-function tileIndexForProgress(doneCount) {
-  // 0 -> Startfeld (Index 0), 1 -> Feld 1 (Index 0), 2 -> Feld 2 (Index 1) ...
-  if (doneCount <= 0) return 0;
-  return Math.min(total - 1, doneCount - 1);
-}
-
-const mePos = tileIndexForProgress(meDone);
-const otherPos = other ? tileIndexForProgress(otherDone) : -1;
-
-const boardTiles = daysArr.map((d, i) => {
-  const dayKey = formatDateLocal(d);
-  const dayNum = d.getDate();
-
-  // Serpentine: jede zweite Reihe umdrehen
-  const row = Math.floor(i / COLS);
-  const col = i % COLS;
-  const serpCol = (row % 2 === 0) ? col : (COLS - 1 - col);
-
-  const gridCol = serpCol + 1;
-  const gridRow = row + 1;
-
-  const meK = `${meRow.id}:${dayKey}`;
-  const otherK = other ? `${other.id}:${dayKey}` : null;
-
-  const meOn = STATE.checkins.get(meK) === true;
-  const otherOn = otherK ? (STATE.checkins.get(otherK) === true) : false;
-
-  const showMe = (i === mePos);
-  const showOther = (other && i === otherPos);
+  // Position: 0 = START, 1 = Tag1, ..., totalDays = TagN, totalDays+1 = FINISH
+  const mePos = Math.min(totalTiles - 1, Math.max(0, meDone));
+  const otherPos = other ? Math.min(totalTiles - 1, Math.max(0, otherDone)) : -1;
 
   const meToken = tokenEmoji(meRow.avatar?.token);
   const otherToken = other ? tokenEmoji(other.avatar?.token) : "👤";
 
-  // Optional: Montag-Highlight
-  const isMonday = d.getDay() === 1;
+  const boardTiles = tiles
+    .map((t, i) => {
+      const row = Math.floor(i / BOARD_COLS);
+      const col = i % BOARD_COLS;
+      const serpCol = row % 2 === 0 ? col : BOARD_COLS - 1 - col;
 
-  return `
-    <button type="button" data-day="${dayKey}"
-      style="grid-column:${gridCol}; grid-row:${gridRow};"
-      class="relative rounded-2xl border p-3 text-left touch-manipulation
-        ${meOn ? "bg-emerald-500 text-white border-emerald-400" : "bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-800 hover:bg-slate-50 dark:hover:bg-slate-800"}
-        ${isMonday ? "ring-2 ring-purple-400/70" : ""}
-      ">
-      <div class="text-xs font-semibold ${meOn ? "text-white/80" : "text-slate-400"}">TAG</div>
-      <div class="text-2xl font-extrabold mt-1">${dayNum}</div>
+      const gridCol = serpCol + 1;
+      const gridRow = row + 1;
 
-      <div class="mt-3 flex items-center gap-2">
-        <span class="text-xs font-bold ${meOn ? "text-white" : "text-slate-600 dark:text-slate-300"}">Du</span>
-        <span class="w-3 h-3 rounded-full ${meOn ? "bg-white" : "bg-slate-200 dark:bg-slate-700"}"></span>
+      const showMe = i === mePos;
+      const showOther = other && i === otherPos;
 
-        <span class="ml-3 text-xs font-bold ${meOn ? "text-white" : "text-slate-600 dark:text-slate-300"}">${other ? other.nickname : "—"}</span>
-        <span class="w-3 h-3 rounded-full ${otherOn ? (meOn ? "bg-white/90" : "bg-purple-500") : "bg-slate-200 dark:bg-slate-700"}"></span>
-      </div>
+      if (t.type === "start") {
+        return `
+          <div
+            style="grid-column:${gridCol}; grid-row:${gridRow};"
+            class="relative rounded-2xl border p-3 bg-slate-900 text-white border-slate-700">
+            <div class="text-xs font-semibold text-white/80">START</div>
+            <div class="text-2xl font-extrabold mt-1">🚦</div>
+            <div class="absolute -top-3 left-3 flex gap-1 text-2xl select-none">
+              ${showMe ? `<span title="Du">${meToken}</span>` : ""}
+              ${showOther ? `<span title="${other?.nickname ?? "Mitspieler"}">${otherToken}</span>` : ""}
+            </div>
+          </div>
+        `;
+      }
 
-      <!-- Tokens -->
-      <div class="absolute -top-3 left-3 flex gap-1 text-2xl select-none">
-        ${showMe ? `<span title="Du">${meToken}</span>` : ""}
-        ${showOther ? `<span title="${other?.nickname ?? "Mitspieler"}">${otherToken}</span>` : ""}
-      </div>
+      if (t.type === "finish") {
+        return `
+          <div
+            style="grid-column:${gridCol}; grid-row:${gridRow};"
+            class="relative rounded-2xl border p-3 bg-purple-600 text-white border-purple-400">
+            <div class="text-xs font-semibold text-white/80">FINISH</div>
+            <div class="text-2xl font-extrabold mt-1">🏁</div>
+            <div class="absolute -top-3 left-3 flex gap-1 text-2xl select-none">
+              ${showMe ? `<span title="Du">${meToken}</span>` : ""}
+              ${showOther ? `<span title="${other?.nickname ?? "Mitspieler"}">${otherToken}</span>` : ""}
+            </div>
+          </div>
+        `;
+      }
 
-      <div class="absolute top-2 right-2 text-sm ${meOn ? "opacity-100" : "opacity-30"}">✅</div>
-    </button>
-  `;
-}).join("");
+      // day tile
+      const d = t.d;
+      const dayKey = formatDateLocal(d);
+      const dayNum = d.getDate();
+
+      const meK = `${meRow.id}:${dayKey}`;
+      const otherK = other ? `${other.id}:${dayKey}` : null;
+
+      const meOn = STATE.checkins.get(meK) === true;
+      const otherOn = otherK ? STATE.checkins.get(otherK) === true : false;
+
+      const isMonday = d.getDay() === 1;
+
+      return `
+        <button type="button" data-day="${dayKey}"
+          style="grid-column:${gridCol}; grid-row:${gridRow};"
+          class="relative rounded-2xl border p-3 text-left touch-manipulation
+            ${meOn
+              ? "bg-emerald-500 text-white border-emerald-400"
+              : "bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-800 hover:bg-slate-50 dark:hover:bg-slate-800"}
+            ${isMonday ? "ring-2 ring-purple-400/70" : ""}">
+          <div class="text-xs font-semibold ${meOn ? "text-white/80" : "text-slate-400"}">TAG</div>
+          <div class="text-2xl font-extrabold mt-1">${dayNum}</div>
+
+          <div class="mt-3 flex items-center gap-2">
+            <span class="text-xs font-bold ${meOn ? "text-white" : "text-slate-600 dark:text-slate-300"}">Du</span>
+            <span class="w-3 h-3 rounded-full ${meOn ? "bg-white" : "bg-slate-200 dark:bg-slate-700"}"></span>
+
+            <span class="ml-3 text-xs font-bold ${meOn ? "text-white" : "text-slate-600 dark:text-slate-300"}">${other ? other.nickname : "—"}</span>
+            <span class="w-3 h-3 rounded-full ${otherOn ? (meOn ? "bg-white/90" : "bg-purple-500") : "bg-slate-200 dark:bg-slate-700"}"></span>
+          </div>
+
+          <div class="absolute -top-3 left-3 flex gap-1 text-2xl select-none">
+            ${showMe ? `<span title="Du">${meToken}</span>` : ""}
+            ${showOther ? `<span title="${other?.nickname ?? "Mitspieler"}">${otherToken}</span>` : ""}
+          </div>
+
+          <div class="absolute top-2 right-2 text-sm ${meOn ? "opacity-100" : "opacity-30"}">✅</div>
+        </button>
+      `;
+    })
+    .join("");
+
+  const myTokenId = meRow.avatar?.token ?? "car";
+  const tokenModalCards = TOKEN_OPTIONS.map((t) => {
+    const active = t.id === myTokenId;
+    return `
+      <button type="button" data-token="${t.id}"
+        class="flex items-center justify-between rounded-2xl border px-4 py-3
+          ${active
+            ? "bg-emerald-500 text-white border-emerald-400"
+            : "bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-800 hover:bg-slate-50 dark:hover:bg-slate-800"}">
+        <span class="text-lg font-extrabold">${t.emoji} <span class="text-sm font-semibold">${t.label}</span></span>
+        <span class="text-xs font-bold opacity-70">${t.id}</span>
+      </button>
+    `;
+  }).join("");
 
   setApp(`
     <div class="grid gap-4">
@@ -500,12 +537,16 @@ const boardTiles = daysArr.map((d, i) => {
           <p class="text-2xl font-extrabold tracking-wider">${room.code}</p>
         </div>
 
-        <div class="flex gap-2">
-          <button id="btnCopy"
+        <div class="flex gap-2 flex-wrap">
+          <button id="btnCopy" type="button"
             class="rounded-2xl px-4 py-3 font-semibold border border-slate-200 dark:border-slate-800 hover:bg-slate-100 dark:hover:bg-slate-800">
             Code kopieren
           </button>
-          <button id="btnReset"
+          <button id="btnToken" type="button"
+            class="rounded-2xl px-4 py-3 font-semibold border border-slate-200 dark:border-slate-800 hover:bg-slate-100 dark:hover:bg-slate-800">
+            Figur wählen ${tokenEmoji(myTokenId)}
+          </button>
+          <button id="btnReset" type="button"
             class="rounded-2xl px-4 py-3 font-bold bg-slate-900 text-white hover:opacity-90">
             Room wechseln
           </button>
@@ -528,34 +569,97 @@ const boardTiles = daysArr.map((d, i) => {
         </div>
 
         <div class="p-4 rounded-2xl border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-950">
-          <p class="text-sm text-slate-500 dark:text-slate-400">Mini-Ranking (diese Woche)</p>
+          <p class="text-sm text-slate-500 dark:text-slate-400">Mini-Ranking (Monat)</p>
           <p class="text-xl font-extrabold mt-1">${leader}</p>
           <p class="text-xs text-slate-500 dark:text-slate-400 mt-2">
-            (Montag–Sonntag, zählt erledigte Tage)
+            (zählt erledigte Tage im Februar)
           </p>
         </div>
       </div>
 
-      <div id="daysGrid" class="grid grid-cols-3 sm:grid-cols-5 md:grid-cols-7 gap-3">
-        ${dayCards}
+      <!-- BOARD -->
+      <div id="daysGrid"
+        class="grid gap-3"
+        style="grid-template-columns: repeat(${BOARD_COLS}, minmax(0, 1fr));">
+        ${boardTiles}
       </div>
 
       <p class="text-xs text-slate-500 dark:text-slate-400 text-center mt-2">
-        Tippe auf einen Tag, um <b>deinen</b> Status zu toggeln. Mitspieler ist read-only.
+        Tippe auf ein Feld (Tag), um <b>deinen</b> Status zu toggeln. Mitspieler ist read-only.
       </p>
+
+      <!-- TOKEN MODAL -->
+      <div id="tokenModal"
+        class="fixed inset-0 z-50 hidden items-end md:items-center justify-center p-4 pointer-events-none">
+        <div class="absolute inset-0 bg-black/40"></div>
+
+        <div class="relative w-full max-w-md rounded-3xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-5 pointer-events-auto">
+          <div class="flex items-center justify-between">
+            <p class="font-extrabold text-lg">Figur wählen</p>
+            <button id="btnTokenClose" type="button"
+              class="rounded-xl px-3 py-2 font-semibold border border-slate-200 dark:border-slate-800 hover:bg-slate-100 dark:hover:bg-slate-800">
+              ✕
+            </button>
+          </div>
+
+          <p class="text-sm text-slate-500 dark:text-slate-400 mt-1">
+            Du kannst jederzeit wechseln.
+          </p>
+
+          <div class="mt-4 grid gap-2">
+            ${tokenModalCards}
+          </div>
+
+          <button id="btnTokenClose2" type="button"
+            class="mt-4 w-full rounded-2xl px-4 py-3 font-bold bg-slate-900 text-white hover:opacity-90">
+            Fertig
+          </button>
+        </div>
+      </div>
     </div>
   `);
+}
 
-  document.getElementById("btnCopy")?.addEventListener("click", async () => {
+/* =========================
+   6) EVENTS (DELEGATION)
+   ========================= */
+// iOS: Click kommt oft nach Pointerup → doppelt verhindern
+let lastPointerTs = 0;
+
+function openTokenModal() {
+  const m = document.getElementById("tokenModal");
+  if (!m) return;
+  m.classList.remove("hidden");
+  m.classList.add("flex");
+  m.classList.remove("pointer-events-none");
+}
+
+function closeTokenModal() {
+  const m = document.getElementById("tokenModal");
+  if (!m) return;
+  m.classList.add("hidden");
+  m.classList.remove("flex");
+  m.classList.add("pointer-events-none");
+}
+
+async function handleActionFromEvent(ev) {
+  const t = ev.target;
+
+  // Join/Create Buttons
+  if (t?.id === "btnJoin") return joinRoomFlow();
+  if (t?.id === "btnCreate") return createRoomFlow();
+
+  // Dashboard Buttons
+  if (t?.id === "btnCopy") {
     try {
-      await navigator.clipboard.writeText(room.code);
-      toast("Room Code kopiert ✅");
+      await navigator.clipboard.writeText(STATE.room?.code ?? "");
+      return toast("Room Code kopiert ✅");
     } catch {
-      toast("Kopieren ging nicht. Code manuell markieren.");
+      return toast("Kopieren ging nicht. Code manuell markieren.");
     }
-  });
+  }
 
-  document.getElementById("btnReset")?.addEventListener("click", () => {
+  if (t?.id === "btnReset") {
     localStorage.removeItem(LS.roomCode);
     localStorage.removeItem(LS.nickname);
     localStorage.removeItem(LS.playerId);
@@ -565,31 +669,33 @@ const boardTiles = daysArr.map((d, i) => {
     STATE.checkins = new Map();
     if (STATE.channel) supabase.removeChannel(STATE.channel);
     STATE.channel = null;
-    renderJoin();
-  });
+    return renderJoin();
+  }
 
-  // iOS Tap-Fix: Event Delegation + Touchstart
-(function wireDayGrid() {
-  const grid = document.getElementById("daysGrid");
-  if (!grid) return;
+  if (t?.id === "btnToken") return openTokenModal();
+  if (t?.id === "btnTokenClose" || t?.id === "btnTokenClose2") return closeTokenModal();
 
-  let lastTouchTs = 0;
-
-  const handler = async (ev) => {
-    const btn = ev.target.closest("[data-day]");
-    if (!btn) return;
-
-    // iOS: touchstart löst oft zusätzlich click aus → doppelt verhindern
-    if (ev.type === "touchstart") {
-      lastTouchTs = Date.now();
-      ev.preventDefault();
-    } else if (ev.type === "click" && Date.now() - lastTouchTs < 600) {
-      return; // click ignorieren, wenn gerade touchstart kam
+  // Token pick
+  const tokenBtn = t.closest?.("[data-token]");
+  if (tokenBtn) {
+    const tokenId = tokenBtn.getAttribute("data-token");
+    if (!TOKEN_OPTIONS.some((x) => x.id === tokenId)) return;
+    try {
+      await setMyToken(tokenId);
+      closeTokenModal();
+      renderDashboard();
+    } catch (e) {
+      console.error(e);
+      toast("Token speichern fehlgeschlagen.");
     }
+    return;
+  }
 
-    const dayStr = btn.getAttribute("data-day");
+  // Day tile toggle
+  const dayBtn = t.closest?.("[data-day]");
+  if (dayBtn) {
+    const dayStr = dayBtn.getAttribute("data-day");
     if (!dayStr) return;
-
     try {
       await toggleMyDay(dayStr);
 
@@ -601,18 +707,24 @@ const boardTiles = daysArr.map((d, i) => {
       console.error(e);
       toast("Speichern fehlgeschlagen.");
     }
-  };
-
-  grid.addEventListener("touchstart", handler, { passive: false });
-  grid.addEventListener("click", handler);
-})();
+  }
 }
 
+document.addEventListener("pointerup", (ev) => {
+  lastPointerTs = Date.now();
+  handleActionFromEvent(ev);
+}, { passive: true });
+
+document.addEventListener("click", (ev) => {
+  // ignorier click, wenn kurz vorher pointerup kam
+  if (Date.now() - lastPointerTs < 500) return;
+  handleActionFromEvent(ev);
+});
+
 /* =========================
-   6) BOOT
+   7) BOOT
    ========================= */
 window.addEventListener("load", async () => {
-
   const savedCode = normalizeRoomCode(localStorage.getItem(LS.roomCode) ?? "");
   const savedNick = (localStorage.getItem(LS.nickname) ?? "").trim();
 
