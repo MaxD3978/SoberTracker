@@ -18,11 +18,10 @@ const LS = {
 };
 
 const TOKEN_OPTIONS = [
-  { id: "car", emoji: "🚗", label: "Auto" },
-  { id: "dog", emoji: "🐶", label: "Hund" },
-  { id: "hat", emoji: "🎩", label: "Zylinder" },
-  { id: "rocket", emoji: "🚀", label: "Rakete" },
-  { id: "cat", emoji: "🐱", label: "Katze" },
+  { id: "car", emoji: "🤖", label: "TechnoBob" },
+  { id: "dog", emoji: "🎃", label: "Kirbus" },
+  { id: "hat", emoji: "🤓", label: "Druffi" },
+  { id: "rocket", emoji: "🤠", label: "Yeeha" },
 ];
 
 function tokenEmoji(tokenId) {
@@ -96,7 +95,7 @@ const TRACK_MONTH_INDEX = 1; // 0=Jan, 1=Feb
 const TRACK_YEAR = new Date().getFullYear();
 
 // Board Layout
-const BOARD_COLS = 7;
+const BOARD_COLS = 4;
 
 /* =========================
    2) DATA ACCESS
@@ -445,7 +444,7 @@ function renderDashboard() {
         return `
           <div
             style="grid-column:${gridCol}; grid-row:${gridRow};"
-            class="relative rounded-2xl border p-3 bg-slate-900 text-white border-slate-700">
+            class="relative rounded-2xl border p-2 sm:p-3 bg-slate-900 text-white border-slate-700">
             <div class="text-xs font-semibold text-white/80">START</div>
             <div class="text-2xl font-extrabold mt-1">🚦</div>
             <div class="absolute -top-3 left-3 flex gap-1 text-2xl select-none">
@@ -460,7 +459,7 @@ function renderDashboard() {
         return `
           <div
             style="grid-column:${gridCol}; grid-row:${gridRow};"
-            class="relative rounded-2xl border p-3 bg-purple-600 text-white border-purple-400">
+            class="relative rounded-2xl border p-2 sm:p-3 bg-purple-600 text-white border-purple-400">
             <div class="text-xs font-semibold text-white/80">FINISH</div>
             <div class="text-2xl font-extrabold mt-1">🏁</div>
             <div class="absolute -top-3 left-3 flex gap-1 text-2xl select-none">
@@ -487,19 +486,19 @@ function renderDashboard() {
       return `
         <button type="button" data-day="${dayKey}"
           style="grid-column:${gridCol}; grid-row:${gridRow};"
-          class="relative rounded-2xl border p-3 text-left touch-manipulation
+          class="relative rounded-2xl border p-2 sm:p-3 text-left touch-manipulation
             ${meOn
               ? "bg-emerald-500 text-white border-emerald-400"
               : "bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-800 hover:bg-slate-50 dark:hover:bg-slate-800"}
             ${isMonday ? "ring-2 ring-purple-400/70" : ""}">
           <div class="text-xs font-semibold ${meOn ? "text-white/80" : "text-slate-400"}">TAG</div>
-          <div class="text-2xl font-extrabold mt-1">${dayNum}</div>
+          <div class="text-xl sm:text-2xl font-extrabold mt-1">${dayNum}</div>
 
           <div class="mt-3 flex items-center gap-2">
-            <span class="text-xs font-bold ${meOn ? "text-white" : "text-slate-600 dark:text-slate-300"}">Du</span>
+            <span class="hidden sm:inline text-xs font-bold ${meOn ? "text-white" : "text-slate-600 dark:text-slate-300"}">Du</span>
             <span class="w-3 h-3 rounded-full ${meOn ? "bg-white" : "bg-slate-200 dark:bg-slate-700"}"></span>
 
-            <span class="ml-3 text-xs font-bold ${meOn ? "text-white" : "text-slate-600 dark:text-slate-300"}">${other ? other.nickname : "—"}</span>
+            <span class="hidden sm:inline ml-3 text-xs font-bold ${meOn ? "text-white" : "text-slate-600 dark:text-slate-300"}">${other ? other.nickname : "—"}</span>
             <span class="w-3 h-3 rounded-full ${otherOn ? (meOn ? "bg-white/90" : "bg-purple-500") : "bg-slate-200 dark:bg-slate-700"}"></span>
           </div>
 
@@ -579,7 +578,7 @@ function renderDashboard() {
 
       <!-- BOARD -->
       <div id="daysGrid"
-        class="grid gap-3"
+        class="grid gap-2 sm:gap-3"
         style="grid-template-columns: repeat(${BOARD_COLS}, minmax(0, 1fr));">
         ${boardTiles}
       </div>
