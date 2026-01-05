@@ -243,6 +243,55 @@ function toast(text) {
   alert(text);
 }
 
+function burstConfetti() {
+  const root = document.getElementById("confetti");
+  if (!root) return;
+
+  // Reset
+  root.innerHTML = "";
+  root.classList.remove("hidden");
+
+  const pieces = 70; // nicht zu hoch fürs iPhone
+  const duration = 1200;
+
+  for (let i = 0; i < pieces; i++) {
+    const p = document.createElement("div");
+    p.style.position = "absolute";
+    p.style.left = `${Math.random() * 100}vw`;
+    p.style.top = `-10px`;
+    p.style.width = `${6 + Math.random() * 6}px`;
+    p.style.height = `${8 + Math.random() * 10}px`;
+    p.style.borderRadius = "2px";
+    p.style.opacity = "0.95";
+
+    // zufällige Farbe (kein Tailwind, direkt inline)
+    p.style.background = `hsl(${Math.floor(Math.random() * 360)}, 90%, 60%)`;
+
+    // Animation: fallen + drehen
+    const fall = 70 + Math.random() * 45;     // vh
+    const drift = -20 + Math.random() * 40;   // vw
+    const rot = -360 + Math.random() * 720;
+
+    p.animate(
+      [
+        { transform: `translate(0, 0) rotate(0deg)` },
+        { transform: `translate(${drift}vw, ${fall}vh) rotate(${rot}deg)` },
+      ],
+      {
+        duration: duration + Math.random() * 400,
+        easing: "cubic-bezier(.2,.8,.2,1)",
+      }
+    );
+
+    root.appendChild(p);
+  }
+
+  setTimeout(() => {
+    root.classList.add("hidden");
+    root.innerHTML = "";
+  }, duration + 500);
+}
+
 function computeProgress(playerId, daysArr) {
   let done = 0;
   for (const d of daysArr) {
@@ -695,11 +744,19 @@ async function handleActionFromEvent(ev) {
     const dayStr = dayBtn.getAttribute("data-day");
     if (!dayStr) return;
     try {
+      const daysArr = monthDays(TRACK_YEAR, TRACK_MONTH_INDEX);
+      const beforeDone = computeProgress(STATE.me.id, daysArr);
+
       await toggleMyDay(dayStr);
 
-      // Optimistic UI
       const k = `${STATE.me.id}:${dayStr}`;
       STATE.checkins.set(k, !(STATE.checkins.get(k) === true));
+
+      const afterDone = computeProgress(STATE.me.id, daysArr);
+
+      if (afterDone > beforeDone && afterDone % 7 === 0) {
+         burstConfetti();
+
       renderDashboard();
     } catch (e) {
       console.error(e);
