@@ -22,6 +22,40 @@ const LS = {
   playerId: "sober_player_id",
 };
 
+const TOKEN_OPTIONS = [
+  { id: "car", emoji: "🚗", label: "Auto" },
+  { id: "dog", emoji: "🐶", label: "Hund" },
+  { id: "hat", emoji: "🎩", label: "Zylinder" },
+  { id: "rocket", emoji: "🚀", label: "Rakete" },
+  { id: "cat", emoji: "🐱", label: "Katze" },
+];
+
+function tokenEmoji(tokenId) {
+  return (TOKEN_OPTIONS.find(t => t.id === tokenId)?.emoji) ?? "🙂";
+}
+
+async function setMyToken(tokenId) {
+  if (!STATE.room || !STATE.me) return;
+  const device_id = getDeviceId();
+  const { data, error } = await supabase
+    .from("players")
+    .upsert(
+      {
+        room_id: STATE.room.id,
+        device_id,
+        nickname: STATE.me.nickname,
+        avatar: { ...(STATE.me.avatar || {}), token: tokenId },
+      },
+      { onConflict: "room_id,device_id" }
+    )
+    .select("*")
+    .single();
+  if (error) throw error;
+  STATE.me = data;
+  // players neu laden, damit der andere auch korrekt angezeigt wird
+  STATE.players = await loadPlayers(STATE.room.id);
+}
+
 function getDeviceId() {
   let id = localStorage.getItem(LS.deviceId);
   if (!id) {
@@ -390,36 +424,73 @@ function renderDashboard() {
         : (meDone > otherDone ? `${meRow.nickname} führt 🏁` : `${other.nickname} führt 🏁`))
     : "Warte auf Mitspieler…";
 
-  const dayCards = daysArr.map(d => {
-    const dayKey = formatDateLocal(d);
-    const dayNum = d.getDate();
+  const COLS = 7; // Breite des Spielfelds (z.B. 7 wie Kalender)
+const total = daysArr.length;
 
-    const meK = `${meRow.id}:${dayKey}`;
-    const otherK = other ? `${other.id}:${dayKey}` : null;
+function tileIndexForProgress(doneCount) {
+  // 0 -> Startfeld (Index 0), 1 -> Feld 1 (Index 0), 2 -> Feld 2 (Index 1) ...
+  if (doneCount <= 0) return 0;
+  return Math.min(total - 1, doneCount - 1);
+}
 
-    const meOn = STATE.checkins.get(meK) === true;
-    const otherOn = otherK ? (STATE.checkins.get(otherK) === true) : false;
+const mePos = tileIndexForProgress(meDone);
+const otherPos = other ? tileIndexForProgress(otherDone) : -1;
 
-    return `
-      <button data-day="${dayKey}"
-        class="day-card group relative p-3 rounded-2xl border text-left touch-manipulation
-          ${meOn ? "bg-emerald-500 text-white border-emerald-400" : "bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-800 hover:bg-slate-50 dark:hover:bg-slate-800"}
-        ">
-        <div class="text-xs font-semibold ${meOn ? "text-white/80" : "text-slate-400"}">TAG</div>
-        <div class="text-2xl font-extrabold mt-1">${dayNum}</div>
+const boardTiles = daysArr.map((d, i) => {
+  const dayKey = formatDateLocal(d);
+  const dayNum = d.getDate();
 
-        <div class="mt-3 flex items-center gap-2">
-          <span class="text-xs font-bold ${meOn ? "text-white" : "text-slate-600 dark:text-slate-300"}">Du</span>
-          <span class="w-3 h-3 rounded-full ${meOn ? "bg-white" : "bg-slate-200 dark:bg-slate-700"}"></span>
+  // Serpentine: jede zweite Reihe umdrehen
+  const row = Math.floor(i / COLS);
+  const col = i % COLS;
+  const serpCol = (row % 2 === 0) ? col : (COLS - 1 - col);
 
-          <span class="ml-3 text-xs font-bold ${meOn ? "text-white" : "text-slate-600 dark:text-slate-300"}">${other ? other.nickname : "—"}</span>
-          <span class="w-3 h-3 rounded-full ${otherOn ? (meOn ? "bg-white/90" : "bg-purple-500") : "bg-slate-200 dark:bg-slate-700"}"></span>
-        </div>
+  const gridCol = serpCol + 1;
+  const gridRow = row + 1;
 
-        <div class="absolute top-2 right-2 text-sm ${meOn ? "opacity-100" : "opacity-30"}">✅</div>
-      </button>
-    `;
-  }).join("");
+  const meK = `${meRow.id}:${dayKey}`;
+  const otherK = other ? `${other.id}:${dayKey}` : null;
+
+  const meOn = STATE.checkins.get(meK) === true;
+  const otherOn = otherK ? (STATE.checkins.get(otherK) === true) : false;
+
+  const showMe = (i === mePos);
+  const showOther = (other && i === otherPos);
+
+  const meToken = tokenEmoji(meRow.avatar?.token);
+  const otherToken = other ? tokenEmoji(other.avatar?.token) : "👤";
+
+  // Optional: Montag-Highlight
+  const isMonday = d.getDay() === 1;
+
+  return `
+    <button type="button" data-day="${dayKey}"
+      style="grid-column:${gridCol}; grid-row:${gridRow};"
+      class="relative rounded-2xl border p-3 text-left touch-manipulation
+        ${meOn ? "bg-emerald-500 text-white border-emerald-400" : "bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-800 hover:bg-slate-50 dark:hover:bg-slate-800"}
+        ${isMonday ? "ring-2 ring-purple-400/70" : ""}
+      ">
+      <div class="text-xs font-semibold ${meOn ? "text-white/80" : "text-slate-400"}">TAG</div>
+      <div class="text-2xl font-extrabold mt-1">${dayNum}</div>
+
+      <div class="mt-3 flex items-center gap-2">
+        <span class="text-xs font-bold ${meOn ? "text-white" : "text-slate-600 dark:text-slate-300"}">Du</span>
+        <span class="w-3 h-3 rounded-full ${meOn ? "bg-white" : "bg-slate-200 dark:bg-slate-700"}"></span>
+
+        <span class="ml-3 text-xs font-bold ${meOn ? "text-white" : "text-slate-600 dark:text-slate-300"}">${other ? other.nickname : "—"}</span>
+        <span class="w-3 h-3 rounded-full ${otherOn ? (meOn ? "bg-white/90" : "bg-purple-500") : "bg-slate-200 dark:bg-slate-700"}"></span>
+      </div>
+
+      <!-- Tokens -->
+      <div class="absolute -top-3 left-3 flex gap-1 text-2xl select-none">
+        ${showMe ? `<span title="Du">${meToken}</span>` : ""}
+        ${showOther ? `<span title="${other?.nickname ?? "Mitspieler"}">${otherToken}</span>` : ""}
+      </div>
+
+      <div class="absolute top-2 right-2 text-sm ${meOn ? "opacity-100" : "opacity-30"}">✅</div>
+    </button>
+  `;
+}).join("");
 
   setApp(`
     <div class="grid gap-4">
