@@ -18,8 +18,8 @@ const LS = {
 };
 
 const TOKEN_OPTIONS = [
-  { id: "1", emoji: "🤖", label: "TechnoBob" },
-  { id: "2", emoji: "🎃", label: "Kirbus" },
+  { id: "Bob", emoji: "🤖", label: "TechnoBob" },
+  { id: "Kirbus", emoji: "🎃", label: "Kirbus" },
   { id: "3", emoji: "🤓", label: "Druffi" },
   { id: "4", emoji: "🤠", label: "Yeeha" },
 ];
@@ -372,9 +372,9 @@ async function enterRoom(room, nickname) {
   localStorage.setItem(LS.roomCode, room.code);
   localStorage.setItem(LS.nickname, nickname);
 
-  // Token default: wenn keiner gesetzt, nehmen wir "car"
+  // Token default: wenn keiner gesetzt, nehmen wir "Bob"
   const existingToken = STATE.me?.avatar?.token;
-  const initialAvatar = existingToken ? { token: existingToken } : { token: "car" };
+  const initialAvatar = existingToken ? { token: existingToken } : { token: "Bob" };
 
   const me = await upsertPlayer(room.id, nickname, initialAvatar);
   localStorage.setItem(LS.playerId, me.id);
@@ -513,7 +513,7 @@ function renderDashboard() {
     })
     .join("");
 
-  const myTokenId = meRow.avatar?.token ?? "car";
+  const myTokenId = meRow.avatar?.token ?? "Bob";
   const tokenModalCards = TOKEN_OPTIONS.map((t) => {
     const active = t.id === myTokenId;
     return `
@@ -568,10 +568,9 @@ function renderDashboard() {
         </div>
 
         <div class="p-4 rounded-2xl border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-950">
-          <p class="text-sm text-slate-500 dark:text-slate-400">Mini-Ranking (Monat)</p>
+          <p class="text-sm text-slate-500 dark:text-slate-400">Ranking</p>
           <p class="text-xl font-extrabold mt-1">${leader}</p>
           <p class="text-xs text-slate-500 dark:text-slate-400 mt-2">
-            (zählt erledigte Tage im Februar)
           </p>
         </div>
       </div>
