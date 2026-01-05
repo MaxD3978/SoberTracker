@@ -18,10 +18,10 @@ const LS = {
 };
 
 const TOKEN_OPTIONS = [
-  { id: "car", emoji: "🤖", label: "TechnoBob" },
-  { id: "dog", emoji: "🎃", label: "Kirbus" },
-  { id: "hat", emoji: "🤓", label: "Druffi" },
-  { id: "rocket", emoji: "🤠", label: "Yeeha" },
+  { id: "1", emoji: "🤖", label: "TechnoBob" },
+  { id: "2", emoji: "🎃", label: "Kirbus" },
+  { id: "3", emoji: "🤓", label: "Druffi" },
+  { id: "4", emoji: "🤠", label: "Yeeha" },
 ];
 
 function tokenEmoji(tokenId) {
