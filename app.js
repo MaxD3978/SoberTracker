@@ -20,8 +20,8 @@ const LS = {
 const TOKEN_OPTIONS = [
   { id: "Bob", emoji: "🤖", label: "TechnoBob" },
   { id: "Kirbus", emoji: "🎃", label: "Kirbus" },
-  { id: "3", emoji: "🤓", label: "Druffi" },
-  { id: "4", emoji: "🤠", label: "Yeeha" },
+  { id: "Unterwasser", emoji: "🤓", label: "Druffi" },
+  { id: "Joa", emoji: "🤠", label: "Yeeha" },
 ];
 
 function tokenEmoji(tokenId) {
