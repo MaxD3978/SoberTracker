@@ -10,18 +10,19 @@
 
   <!-- Font -->
   <style>
-    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@100..900&display=swap');
-    body { font-family: 'Inter', sans-serif; }
+    @import url("https://fonts.googleapis.com/css2?family=Inter:wght@100..900&display=swap");
+    body { font-family: "Inter", sans-serif; }
   </style>
 
-  <!-- PWA -->
-  <link rel="manifest" href="./pwa/manifest.webmanifest">
-  <meta name="theme-color" content="#0b1220">
+  <!-- PWA (GitHub Pages: Project-Pfad ist /SoberTracker/) -->
+  <link rel="manifest" href="/SoberTracker/pwa/manifest.webmanifest" />
+  <meta name="theme-color" content="#0b1220" />
 
   <!-- iOS "App-like" -->
-  <meta name="apple-mobile-web-app-capable" content="yes">
-  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-  <link rel="apple-touch-icon" href="./pwa/icon-192.png">
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+  <link rel="apple-touch-icon" href="/SoberTracker/pwa/icon-192.png" />
 </head>
 
 <body class="min-h-screen bg-slate-50 text-slate-900 dark:bg-slate-950 dark:text-slate-100">
@@ -49,15 +50,18 @@
       <footer class="mt-8 text-center text-xs text-slate-400">
         Tipp: Auf iPhone in Safari → Teilen → „Zum Home-Bildschirm“.
       </footer>
+
     </div>
   </div>
 
-  <script type="module" src="./app.js"></script>
+  <!-- App Logic -->
+  <script type="module" src="/SoberTracker/app.js"></script>
 
+  <!-- Service Worker -->
   <script>
     if ("serviceWorker" in navigator) {
-      navigator.serviceWorker.register("./pwa/sw.js").catch(console.error);
+      navigator.serviceWorker.register("/SoberTracker/pwa/sw.js").catch(console.error);
     }
-  </script>  
+  </script>
 </body>
 </html>
