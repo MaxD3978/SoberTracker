@@ -22,6 +22,7 @@ const TOKEN_OPTIONS = [
   { id: "Kirbus", emoji: "🎃", label: "Kirbus" },
   { id: "Unterwasser", emoji: "🤓", label: "Druffi" },
   { id: "Joa", emoji: "🤠", label: "Yeeha" },
+  { id: "MoneyMango", emoji: "🥭", label: "MoneyMango" },
 ];
 
 function tokenEmoji(tokenId) {
